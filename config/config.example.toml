@@ -1,0 +1,41 @@
+# studio-uploader configuration. Copy to ~/.config/studio-uploader/config.toml
+# (in the restricted uploader user's home). This file holds NO secrets.
+# The refresh token and OAuth client secret live only in the Keychain.
+
+# Where the uploader keeps its frozen files, ledger, state, logs and reports.
+base_dir = "~/StudioUploader"
+
+# The ONE approved staging folder. Nothing else is ever watched.
+staging_dir = "~/Movies/Approved Staging"
+
+# Resumable upload chunk size. Must be a multiple of 256 KiB.
+chunk_size = 8388608
+
+# Shown as login_hint on the consent page (informational, not enforced).
+expected_account_hint = "thenousnetwork@gmail.com"
+
+[readiness]
+stable_checks = 3
+stable_interval_s = 5.0
+min_age_s = 30.0
+require_marker = true
+# Editors write "<file name>.done" next to the render once export finishes.
+marker_suffix = ".done"
+video_extensions = [".mp4", ".mov", ".m4v", ".mkv", ".webm"]
+ffprobe_path = "ffprobe"
+lsof_path = "lsof"
+
+[retry]
+max_attempts = 5
+base_delay_s = 2.0
+max_delay_s = 64.0
+
+[keychain]
+service = "studio-uploader.youtube"
+account = "channel-owner"
+# Leave empty to use the restricted user's login keychain.
+keychain_path = ""
+
+[oauth]
+# Desktop OAuth client ID from the owner's Google Cloud project (not a secret).
+client_id = ""

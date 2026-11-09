@@ -1,0 +1,6 @@
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Deliberately fake tokens used by the mocked API in tests"
+paths = ['''tests/fake_youtube\.py''', '''tests/test_client_auth\.py''']

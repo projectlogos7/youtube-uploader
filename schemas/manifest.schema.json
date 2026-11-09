@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://studio.local/schemas/studio-uploader/manifest-v1.json",
+  "title": "Studio uploader approval manifest (v1)",
+  "description": "One reviewer-approved manifest per video. Privacy is not a field: every upload is Private, never scheduled, never notifies subscribers. The authoritative validator is studio_uploader/manifest.py, which also enforces YouTube limits (title <= 100 chars, description <= 5000 bytes, tags <= 500 chars including quotes and separators, no '<' or '>').",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "file_sha256", "channel_id", "title", "description", "tags", "categoryId",
+    "defaultLanguage", "madeForKids", "license", "rights_note", "containsSyntheticMedia",
+    "approved_by", "approved_at", "approval_id"
+  ],
+  "properties": {
+    "manifest_version": {"const": 1},
+    "file_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$", "description": "SHA-256 of the exact approved file"},
+    "channel_id": {"type": "string", "pattern": "^UC[0-9A-Za-z_-]{22}$", "description": "Must equal the pinned channel ID"},
+    "source_filename": {"type": "string", "description": "Name of the file in the staging folder at approval time"},
+    "title": {"type": "string", "minLength": 1, "maxLength": 100, "pattern": "^[^<>]*$"},
+    "description": {"type": "string", "pattern": "^[^<>]*$", "description": "At most 5000 UTF-8 bytes"},
+    "tags": {"type": "array", "items": {"type": "string", "minLength": 1, "pattern": "^[^<>,]*$"}},
+    "categoryId": {"type": "string", "pattern": "^[0-9]+$"},
+    "defaultLanguage": {"type": "string", "pattern": "^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$"},
+    "madeForKids": {"type": "boolean", "description": "Audience. Explicit; there is no default"},
+    "license": {"enum": ["youtube", "creativeCommon"]},
+    "rights_note": {"type": "string", "minLength": 1, "description": "How rights were cleared, by the reviewer"},
+    "containsSyntheticMedia": {"type": "boolean", "description": "Declared when altered or synthetic content is present. Never defaulted"},
+    "notes": {"type": "string"},
+    "approved_by": {"type": "string", "minLength": 1},
+    "approved_at": {"type": "string", "format": "date-time"},
+    "approval_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{5,63}$"}
+  }
+}

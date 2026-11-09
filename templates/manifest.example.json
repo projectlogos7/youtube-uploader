@@ -1,0 +1,18 @@
+{
+  "manifest_version": 1,
+  "file_sha256": "3b1f0c7d2a9e8b6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2c",
+  "channel_id": "UCxxxxxxxxxxxxxxxxxxxxxx",
+  "source_filename": "Pilot test.mov",
+  "title": "Pilot test (private)",
+  "description": "Internal pilot upload. Not for publication.",
+  "tags": ["pilot"],
+  "categoryId": "27",
+  "defaultLanguage": "en",
+  "madeForKids": false,
+  "license": "youtube",
+  "rights_note": "All footage and audio produced in-house. Cleared by the reviewer.",
+  "containsSyntheticMedia": false,
+  "approved_by": "Studio Lead",
+  "approved_at": "2026-11-09T10:00:00+00:00",
+  "approval_id": "20261109-0123456789ab"
+}
