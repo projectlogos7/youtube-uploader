@@ -16,7 +16,11 @@ also writes machine records (`frozen/<id>/approval.json`, `releases/<id>.json`,
 | Pinned channel title / ID (as confirmed by owner) | |
 | OAuth mode: Production-verified **or** Testing with weekly re-consent | |
 | Kill switch tested (`studio-uploader kill`, then `status`) | yes / no |
-| Command run | `studio-uploader activate --reviewer "<name>" --note "<pilot>"` |
+| Review pack folder and `doctor` result (no FAIL) | |
+| Activation ID (printed by `activate`) | |
+| Scope: pilot approval ID(s) **or** "any released video" | |
+| Max uploads / expiry | |
+| Command run | `studio-uploader activate --reviewer "<name>" --pilot <approval_id> --max-uploads 1 --expires-in-days 1` |
 | Signature | |
 
 ## B. Per video: manifest approval (gate 1)

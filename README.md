@@ -4,9 +4,10 @@ A small local tool for the studio Mac that uploads reviewer-approved renders to 
 studio YouTube channel as **Private** videos only. Built from the PRD *Studio YouTube Uploader
 (gated, private-only)*.
 
-**Status: preparation.** Live uploads are disabled until the reviewer activates them (Level 3).
-`run` is a dry run unless `--live` is given *and* the reviewer has activated live mode *and*
-released that specific video.
+**Status: code complete through M7 (pilot).** Live uploads stay disabled until the reviewer
+activates them (Level 3). `run` is a dry run unless `--live` is given *and* the reviewer has made
+a bounded activation *and* approved and released that specific video. The pilot itself is a
+reviewer action: see [docs/PILOT.md](docs/PILOT.md).
 
 ## What it will and will not do
 
@@ -31,14 +32,17 @@ pytest -q
 
 | Command | Who | What |
 | --- | --- | --- |
-| `scan` | implementer | Readiness of files in the staging folder (never authorizes) |
+| `scan [--notify]` | implementer | Readiness of files in the staging folder (never authorizes) |
 | `prepare <file>` | implementer | Draft manifest with the file hash and pinned channel |
 | `validate <manifest> [--draft]` | anyone | Check a manifest against the schema and YouTube limits |
 | `approve <draft> --reviewer N` | reviewer | **Gate 1**: freeze file and manifest read-only, write approval record |
 | `release <approval_id> --reviewer N` | reviewer | **Gate 2**: approve this video for live upload |
-| `activate --reviewer N` / `deactivate` | reviewer | **Level 3** live mode on/off |
+| `activate --reviewer N [--pilot ID] [--max-uploads K] [--expires-in-days D]` / `deactivate` | reviewer | **Level 3** live mode, always bounded |
 | `run [--offline]` | anyone | Dry run: every check, zero upload requests |
-| `run --live` | reviewer | Upload released jobs as Private, verify, report |
+| `run --live [--if-active]` | reviewer / scheduler | Upload released jobs as Private, verify, report |
+| `followup` | anyone | Re-check processing/rejection status of uploaded videos (read-only) |
+| `doctor [--json]` | anyone | Preflight: user, tools, permissions, credential present, token age, pin, quota |
+| `review-pack [--isolation-evidence F] [--test-log F]` | implementer | Evidence folder + pre-ticked "Done means" checklist |
 | `resolve <id> --video-id X \| --not-uploaded` | reviewer | Settle an uncertain outcome |
 | `kill [--reason]` / `unkill` | anyone / reviewer | Kill switch |
 | `status` | anyone | Kill switch, activation, pin, in-flight uploads, jobs |
@@ -47,6 +51,7 @@ pytest -q
 | `revoke [--delete-keychain-item]` | owner/reviewer | Revoke the grant |
 
 Setup, approvals, stops, revocation: **[docs/RUNBOOK.md](docs/RUNBOOK.md)**.
+Pilot (M7): **[docs/PILOT.md](docs/PILOT.md)**.
 Approval sheet: [templates/approval_record.md](templates/approval_record.md).
 Manifest schema: [schemas/manifest.schema.json](schemas/manifest.schema.json).
 
@@ -63,9 +68,13 @@ src/studio_uploader/
   manifest.py     manifest validation (FR-5)
   staging.py      readiness checks (FR-4)
   pinning.py      channel pin (FR-3)
+  doctor.py       preflight checks
+  reviewpack.py   evidence pack for sign-off
+  notify.py       macOS notifications to the reviewer
   ledger.py state.py lock.py killswitch.py audit.py redact.py fsutil.py
 tests/            all against a mocked YouTube API (tests/fake_youtube.py)
-scripts/          isolation_check.sh, dry_run_evidence.sh
+scripts/          isolation_check.sh, dry_run_evidence.sh, install_launchd.sh
+templates/launchd optional LaunchAgents (scheduled run, staging watcher)
 ```
 
 ## PRD traceability
@@ -89,7 +98,20 @@ scripts/          isolation_check.sh, dry_run_evidence.sh
 | RS-8 Kill switch | `killswitch.py`, checked in `YouTubeClient.request` | `test_kill_switch_*` |
 | RS-9 Redacted audit log | `redact.py`, `audit.py` | `test_logs_reports_ledger_contain_no_secrets`, redaction unit tests |
 | RS-10 Runbook | `docs/RUNBOOK.md` | — |
+| Approval level 3: bounded activation, pilot scope | `approval.activate`, `check_activation_scope` | `test_final_phase.py` (pilot scope, count, expiry, resume not double-counted) |
+| Quota (100 uploads/day) | `daily_upload_cap`, `Ledger.starts_today` | `test_daily_upload_cap`, `test_starts_today_boundary` |
+| 7-day Testing-mode tokens | `auth.check_token_age` | `test_token_age_rules`, `test_expired_testing_token_stops_before_any_call` |
+| Restricted macOS identity | `expected_user` | `test_live_refuses_wrong_macos_user` |
+| FR-7 processing outcome over time | `Uploader._followups`, `followup` | `test_followup_*` |
+| Alert the reviewer | `notify.py`, `alerts/` | `test_notifications_on_stop_and_upload` |
+| M6 review pack | `doctor.py`, `reviewpack.py` | `test_doctor_reviewpack.py` |
+| M7 pilot | `docs/PILOT.md` | reviewer-run; not automated |
 | Secret scanning | `.github/workflows/ci.yml` (gitleaks), `.pre-commit-config.yaml` | `test_repo_contains_no_secrets` |
+
+## Not built (PRD non-goals or later phases needing approval)
+
+Thumbnails, playlists, captions, end screens, comments, scheduling, privacy changes and
+publishing. Any of these would need a new PRD approval and new scopes.
 
 ## Trust model notes
 

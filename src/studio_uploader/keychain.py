@@ -50,6 +50,13 @@ class MacKeychain:
         except json.JSONDecodeError:
             raise AuthError("keychain item is not in the expected format") from None
 
+    def exists(self) -> bool:
+        """Check for the item without reading its secret."""
+        r = subprocess.run([self.security, "find-generic-password", "-s", self.cfg.service,
+                            "-a", self.cfg.account, *self._kc()],
+                           capture_output=True, text=True, timeout=30)
+        return r.returncode == 0
+
     def write(self, secret: dict) -> None:
         payload = json.dumps(secret, separators=(",", ":"))
         cmd = ["add-generic-password", "-U", "-s", self.cfg.service, "-a", self.cfg.account,
@@ -73,6 +80,9 @@ class MemoryStore:
 
     def read(self) -> dict | None:
         return self.secret
+
+    def exists(self) -> bool:
+        return self.secret is not None
 
     def write(self, secret: dict) -> None:
         self.secret = dict(secret)

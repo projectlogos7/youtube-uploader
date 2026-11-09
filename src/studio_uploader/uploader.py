@@ -8,10 +8,15 @@ Order of a run (each step logged):
  5. reconcile uncertain     10. post-upload verification via videos.list
     outcomes first          11. report to reviewer; alert on hard stop
  6. resume interrupted uploads before new ones
+ 12. follow up processing status of earlier uploads (read-only)
+
+Live runs also enforce: the restricted macOS user, the activation's expiry,
+pilot scope and upload count, the daily upload cap, and Testing-mode token age.
 """
 
 from __future__ import annotations
 
+import getpass
 import json
 import mimetypes
 import time
@@ -20,15 +25,17 @@ from datetime import datetime, timedelta
 from typing import Callable
 
 from . import approval
+from .auth import check_token_age
 from .audit import AuditLog
 from .config import Config
-from .errors import (ApprovalVoid, HardStop, JobRefused, PermanentApiError,
-                     RetriesExhausted, TransportError, UncertainOutcome,
-                     VerificationFailed)
+from .errors import (ApprovalVoid, HardStop, JobRefused, LiveModeNotActivated,
+                     PermanentApiError, QuotaExceeded, RetriesExhausted,
+                     TransportError, UncertainOutcome, VerificationFailed)
 from .fsutil import atomic_write_json
 from .killswitch import KillSwitch
 from .ledger import Ledger
 from .lock import FileLock
+from .notify import Notifier, null_notifier
 from .pinning import uploads_playlist_id, verify_pin
 from .state import StateStore, UploadState
 from .youtube import YouTubeClient, build_insert_request, next_offset
@@ -43,6 +50,9 @@ class RunResult:
     jobs: list[dict] = field(default_factory=list)
     upload_requests: int = 0
     api_requests: int = 0
+    followups: list[dict] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    idle: bool = False
 
 
 def _parse_ts(s: str) -> datetime:
@@ -51,7 +61,11 @@ def _parse_ts(s: str) -> datetime:
 
 class Uploader:
     def __init__(self, cfg: Config, client: YouTubeClient | None, audit: AuditLog, *,
-                 live: bool, offline: bool = False, sleep: Callable[[float], None] = time.sleep):
+                 live: bool, offline: bool = False, sleep: Callable[[float], None] = time.sleep,
+                 notifier: Notifier = null_notifier,
+                 token_age_days: Callable[[], float | None] | None = None,
+                 current_user: Callable[[], str] = getpass.getuser,
+                 skip_if_idle: bool = False, followup_only: bool = False):
         if live and offline:
             raise ValueError("live mode cannot be offline")
         if live and (client is None or not client.live):
@@ -64,12 +78,24 @@ class Uploader:
         self.live = live
         self.offline = offline
         self.sleep = sleep
+        self.notify = notifier
+        self.token_age_days = token_age_days
+        self.current_user = current_user
+        self.skip_if_idle = skip_if_idle
+        self.followup_only = followup_only
+        self.activation: dict | None = None
+        self.verified_this_run: set[str] = set()
         self.killswitch = KillSwitch(cfg.killswitch_path)
         self.ledger = Ledger(cfg.ledger_path)
         self.states = StateStore(cfg.state_dir)
         self.pinned: str | None = None
         self.uploads_playlist: str | None = None
-        self.result = RunResult(run_id=audit.run_id, mode="live" if live else ("dry-run-offline" if offline else "dry-run"))
+        mode = "live" if live else ("dry-run-offline" if offline else "dry-run")
+        if followup_only:
+            if live or offline:
+                raise ValueError("follow-up is read-only and needs the API")
+            mode = "followup"
+        self.result = RunResult(run_id=audit.run_id, mode=mode)
 
     # ---- entry point -----------------------------------------------------------
 
@@ -79,6 +105,13 @@ class Uploader:
         try:
             self.killswitch.check()
             self.audit.info("check.kill_switch", engaged=False)
+            if self.live and self.cfg.expected_user and self.current_user() != self.cfg.expected_user:
+                raise LiveModeNotActivated(f"live runs must run as the restricted user "
+                                           f"{self.cfg.expected_user!r}, not {self.current_user()!r}")
+            if self.skip_if_idle and self._idle():
+                self.result.idle = True
+                self.audit.info("run.idle", note="no activation or no released work; no API calls made")
+                return self.result
             with FileLock(self.cfg.locks_dir / "run.lock"):
                 self._run()
         except HardStop as exc:
@@ -89,6 +122,10 @@ class Uploader:
                 self.result.api_requests = self.client.stats.total
             if self.result.exit_code == 0 and any(j["outcome"] in ("refused", "failed") for j in self.result.jobs):
                 self.result.exit_code = 1
+                refused = [j for j in self.result.jobs if j["outcome"] == "refused"]
+                if refused:
+                    self.notify("Studio uploader: job refused",
+                                f"{len(refused)} job(s) refused: {refused[0].get('reason', '')}")
             self.audit.info("run.end", exit_code=self.result.exit_code,
                             api_requests=self.result.api_requests,
                             upload_requests=self.result.upload_requests,
@@ -100,6 +137,7 @@ class Uploader:
         self.result.exit_code = 2
         self.result.hard_stop = {"code": exc.code, "reason": str(exc)}
         self.audit.error("run.hard_stop", code=exc.code, reason=str(exc))
+        self.notify(f"Studio uploader STOPPED ({exc.code})", str(exc))
         atomic_write_json(self.cfg.alerts_dir / f"{self.audit.run_id}.json",
                           {"run_id": self.audit.run_id, "code": exc.code, "reason": str(exc),
                            "action": "Reviewer attention required. See docs/RUNBOOK.md."}, mode=0o640)
@@ -109,7 +147,9 @@ class Uploader:
                "exit_code": self.result.exit_code, "hard_stop": self.result.hard_stop,
                "api_requests": self.result.api_requests,
                "upload_requests": self.result.upload_requests, "jobs": self.result.jobs,
-               "pinned_channel_id": self.pinned}
+               "followups": self.result.followups, "warnings": self.result.warnings,
+               "idle": self.result.idle, "pinned_channel_id": self.pinned,
+               "activation_id": (self.activation or {}).get("activation_id")}
         atomic_write_json(self.cfg.reports_dir / f"{self.result.run_id}.json", rep, mode=0o640)
 
     # ---- run body ----------------------------------------------------------------
@@ -117,7 +157,20 @@ class Uploader:
     def _run(self) -> None:
         if self.live:
             act = approval.check_activation(self.cfg)
-            self.audit.info("check.activation", approved_by=act["approved_by"], approved_at=act["approved_at"])
+            self.activation = act
+            used = approval.uploads_under_activation(self.ledger, act["activation_id"])
+            self.audit.info("check.activation", activation_id=act["activation_id"], mode=act["mode"],
+                            approved_by=act["approved_by"], expires_at=act["expires_at"],
+                            uploads_used=len(used), max_uploads=act["max_uploads"],
+                            allowed_approval_ids=act.get("allowed_approval_ids"))
+            age = self.token_age_days() if self.token_age_days else None
+            warning = check_token_age(age, self.cfg.oauth)
+            self.audit.info("check.token_age", age_days=None if age is None else round(age, 2),
+                            testing_mode=self.cfg.oauth.testing_mode)
+            if warning:
+                self.result.warnings.append(warning)
+                self.audit.warn("check.token_age_warning", warning=warning)
+                self.notify("Studio uploader: re-consent soon", warning)
         else:
             self.audit.info("check.activation", skipped="dry run: live mode not requested")
 
@@ -131,6 +184,10 @@ class Uploader:
             self.audit.info("check.channel_pin", ok=True, channel_id=ch["id"],
                             channel_title=ch.get("snippet", {}).get("title"))
 
+        if self.followup_only:
+            self._followups()
+            return
+
         self._reconcile_all()
 
         ids = approval.list_jobs(self.cfg)
@@ -142,6 +199,38 @@ class Uploader:
             self.killswitch.check()
             self._job(aid)
 
+        if not self.offline:
+            self._followups()
+
+    def _idle(self) -> bool:
+        """True when a scheduled live run has nothing to do; makes no API call."""
+        if not self.cfg.activation_path.exists():
+            return True
+        if self.states.all():
+            return False
+        if self.ledger.videos_needing_followup():
+            return False
+        for aid in approval.list_jobs(self.cfg):
+            if not (self.cfg.releases_dir / f"{aid}.json").exists():
+                continue
+            try:
+                h = approval.load_job(self.cfg, aid).manifest.get("file_sha256", "")
+            except JobRefused:
+                return False  # let the real run report it
+            if not self.ledger.video_for_hash(h):
+                return False
+        return True
+
+    # ---- processing follow-up (FR-7) ---------------------------------------------
+
+    def _followups(self) -> None:
+        pending = self.ledger.videos_needing_followup()
+        for vid, entry in pending.items():
+            if vid in self.verified_this_run:
+                continue
+            self.killswitch.check()
+            out = self._verify(entry["approval_id"], entry["file_sha256"], vid, enforce_private=False)
+            self.result.followups.append({"video_id": vid, "approval_id": entry["approval_id"], **out})
     # ---- reconcile (RS-5) ---------------------------------------------------------
 
     def _reconcile_all(self) -> None:
@@ -266,9 +355,12 @@ class Uploader:
 
         rel = approval.check_released(self.cfg, job)
         self.audit.info("job.released", approval_id=aid, released_by=rel["released_by"])
+        approval.check_activation_scope(self.activation, job, self.ledger)
         video_id = self._upload(job)
         rec.update(outcome="uploaded", video_id=video_id)
         rec["verification"] = self._verify(aid, file_hash, video_id)
+        self.notify("Studio uploader: uploaded as Private",
+                    f"{job.manifest['title'][:60]} -> video {video_id}. Publication stays with the reviewer.")
 
     # ---- upload (FR-6, RS-1, RS-6) --------------------------------------------------
 
@@ -296,8 +388,13 @@ class Uploader:
                 st = None
 
         if not st or not st.session_uri:
+            today = self.ledger.starts_today()
+            if today >= self.cfg.daily_upload_cap:
+                raise QuotaExceeded(f"daily upload cap reached ({today}/{self.cfg.daily_upload_cap} "
+                                    "since midnight Pacific)")
             self.ledger.append(approval_id=job.approval_id, file_sha256=job.manifest["file_sha256"],
-                               channel_id=self.pinned, status="started")
+                               channel_id=self.pinned, status="started",
+                               activation_id=(self.activation or {}).get("activation_id"))
             uri = self.client.init_resumable(job.manifest, total, ctype)
             st = UploadState(approval_id=job.approval_id, file_sha256=job.manifest["file_sha256"],
                              channel_id=self.pinned or "", title=job.manifest["title"],
@@ -366,7 +463,10 @@ class Uploader:
 
     # ---- post-upload verification (FR-7) ----------------------------------------------
 
-    def _verify(self, aid: str, file_hash: str, video_id: str) -> dict:
+    def _verify(self, aid: str, file_hash: str, video_id: str, *, enforce_private: bool = True) -> dict:
+        """Check a video on the channel. ``enforce_private`` is off for later
+        follow-ups, because the reviewer may since have published it by hand."""
+        self.verified_this_run.add(video_id)
         v = self.client.video(video_id)
         if v is None:
             self.audit.warn("verify.not_found_yet", approval_id=aid, video_id=video_id)
@@ -385,6 +485,6 @@ class Uploader:
         self.audit.info("verify.result", approval_id=aid, video_id=video_id, **out)
         if channel != self.pinned:
             raise VerificationFailed(f"video {video_id} is on an unexpected channel")
-        if status.get("privacyStatus") != "private":
+        if enforce_private and status.get("privacyStatus") != "private":
             raise VerificationFailed(f"video {video_id} is not private; set it to Private in Studio now")
         return out

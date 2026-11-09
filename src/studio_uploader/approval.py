@@ -18,7 +18,7 @@ import json
 import os
 import secrets
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from . import manifest as mf
@@ -185,12 +185,34 @@ def check_released(cfg: Config, job: Job) -> dict:
 
 
 # ---- Level 3: activation ----------------------------------------------------
+#
+# An activation is the reviewer's go-ahead for live mode. It is always bounded:
+# a maximum number of uploads and an expiry. A *pilot* activation also names the
+# exact approval IDs allowed (M7: one private test video).
 
-def activate(cfg: Config, reviewer: str, note: str = "") -> None:
+def activate(cfg: Config, reviewer: str, note: str = "", *, pilot_ids: list[str] | None = None,
+             max_uploads: int = 1, expires_in_days: float = 7.0,
+             now: datetime | None = None) -> dict:
     if not reviewer.strip():
         raise LiveModeNotActivated("reviewer identity is required")
-    atomic_write_json(cfg.activation_path, {"enabled": True, "approved_by": reviewer.strip(),
-                                            "approved_at": utcnow(), "note": note}, mode=0o440)
+    if max_uploads < 1:
+        raise LiveModeNotActivated("max_uploads must be at least 1")
+    if not 0 < expires_in_days <= 31:
+        raise LiveModeNotActivated("expiry must be between 0 and 31 days")
+    pilot_ids = list(pilot_ids or [])
+    for aid in pilot_ids:
+        verify_job(load_job(cfg, aid), cfg.pinned_channel_id() or "")
+    if pilot_ids and max_uploads > len(pilot_ids):
+        max_uploads = len(pilot_ids)
+    now = now or datetime.now(timezone.utc)
+    rec = {"activation_id": "act-" + now.strftime("%Y%m%d") + "-" + secrets.token_hex(4),
+           "enabled": True, "mode": "pilot" if pilot_ids else "standard",
+           "allowed_approval_ids": pilot_ids or None, "max_uploads": int(max_uploads),
+           "approved_by": reviewer.strip(), "approved_at": now.isoformat(timespec="seconds"),
+           "expires_at": (now + timedelta(days=expires_in_days)).isoformat(timespec="seconds"),
+           "note": note}
+    atomic_write_json(cfg.activation_path, rec, mode=0o440)
+    return rec
 
 
 def deactivate(cfg: Config) -> None:
@@ -199,10 +221,37 @@ def deactivate(cfg: Config) -> None:
         cfg.activation_path.unlink()
 
 
-def check_activation(cfg: Config) -> dict:
+def check_activation(cfg: Config, now: datetime | None = None) -> dict:
     if not cfg.activation_path.exists():
         raise LiveModeNotActivated("live mode has not been activated by the reviewer")
-    rec = json.loads(cfg.activation_path.read_text())
-    if rec.get("enabled") is not True or not rec.get("approved_by"):
+    try:
+        rec = json.loads(cfg.activation_path.read_text())
+    except json.JSONDecodeError:
+        raise LiveModeNotActivated("activation record is unreadable") from None
+    if rec.get("enabled") is not True or not rec.get("approved_by") or not rec.get("activation_id"):
         raise LiveModeNotActivated("activation record is not valid")
+    if not isinstance(rec.get("max_uploads"), int) or rec["max_uploads"] < 1:
+        raise LiveModeNotActivated("activation record has no upload limit")
+    try:
+        expires = datetime.fromisoformat(rec["expires_at"])
+    except (KeyError, TypeError, ValueError):
+        raise LiveModeNotActivated("activation record has no valid expiry") from None
+    if (now or datetime.now(timezone.utc)) >= expires:
+        raise LiveModeNotActivated(f"activation {rec['activation_id']} expired at {rec['expires_at']}")
     return rec
+
+
+def uploads_under_activation(ledger, activation_id: str) -> set[str]:
+    return {e["approval_id"] for e in ledger.entries()
+            if e.get("status") == "started" and e.get("activation_id") == activation_id}
+
+
+def check_activation_scope(act: dict, job: Job, ledger) -> None:
+    """Refuse a job outside the reviewer's activation (pilot list, upload count)."""
+    allowed = act.get("allowed_approval_ids")
+    if allowed is not None and job.approval_id not in allowed:
+        raise NotReleased(f"not in the scope of pilot activation {act['activation_id']}")
+    used = uploads_under_activation(ledger, act["activation_id"])
+    if job.approval_id not in used and len(used) >= act["max_uploads"]:
+        raise NotReleased(f"activation {act['activation_id']} has used its {act['max_uploads']} upload(s); "
+                          "reviewer must activate again")

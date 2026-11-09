@@ -91,11 +91,20 @@ Repeat from inside each AI agent's terminal/tool environment with `AGENT_LABEL=c
 the review pack. On the studio Mac you can also run
 `STUDIO_UPLOADER_ISOLATION_TEST=1 pytest tests/test_credential_isolation.py`.
 
-### 1.7 Dry-run evidence (M6)
+### 1.7 Preflight, dry-run evidence and review pack (M6)
 ```bash
-sudo -u _ytuploader -i scripts/dry_run_evidence.sh
+sudo -u _ytuploader -i
+studio-uploader doctor                       # no FAIL lines allowed
+scripts/dry_run_evidence.sh                  # read-only API calls; must show "upload_requests": 0
+pytest -q | tee ~/test-log.txt               # from the repo checkout
+studio-uploader review-pack --isolation-evidence ~/isolation-evidence.txt --test-log ~/test-log.txt
 ```
-Read-only API calls only (`channels.list`). The output must contain `"upload_requests": 0`.
+The review pack folder (`~/StudioUploader/review-packs/<timestamp>/`) holds `SUMMARY.md` with the
+PRD's "Done means" checklist ticked from the evidence, plus the redacted reports, audit events,
+pin, approval records and ledger. The reviewer reads it, ticks "Code and config reviewed", and
+signs section A of `templates/approval_record.md`.
+
+The first live upload is the M7 pilot: follow **[PILOT.md](PILOT.md)**.
 
 ---
 
@@ -110,11 +119,19 @@ Read-only API calls only (`channels.list`). The output must contain `"upload_req
 | **Gate 1**: approve (freezes file + manifest, read-only) | Reviewer | `studio-uploader approve <draft> --reviewer "<name>"` |
 | Dry run, check the job shows `dry_run_ok` and `private` | Reviewer | `studio-uploader run` |
 | **Gate 2**: release this video for live upload | Reviewer | `studio-uploader release <approval_id> --reviewer "<name>"` |
+| Bounded activation, if none is active | Reviewer | `studio-uploader activate --reviewer "<name>" --max-uploads N --expires-in-days D` |
 | Upload as Private | Reviewer | `studio-uploader run --live` |
+| Later: record processing result | Anyone | `studio-uploader followup` |
 | Read the report: video ID, Private, processing status | Reviewer | `reports/<run_id>.json` |
 | Publish (separate decision) | Reviewer | YouTube Studio, by hand |
 
 Any edit to the frozen file or manifest after Gate 1 voids the approval; prepare and approve again.
+
+Every activation is bounded: an upload count (default 1), an expiry (default 7 days, max 31) and,
+for the pilot, a list of allowed approval IDs. `studio-uploader status` and `doctor` show what is
+used. Live runs also refuse to start unless they run as `expected_user`, stop when the
+`daily_upload_cap` (default 10 per Pacific day) is reached, and, in OAuth Testing mode, stop
+before any call once the refresh token is 7 days old.
 
 ---
 
@@ -126,15 +143,18 @@ The run exits with code 2, writes `alerts/<run_id>.json`, and the reason is in t
 | Code | Meaning | Action |
 | --- | --- | --- |
 | `kill_switch` | Flag file present | Investigate; reviewer runs `unkill` |
-| `not_activated` | `--live` without activation | Reviewer activates if intended |
+| `not_activated` | `--live` without activation, activation expired, or wrong macOS user | Reviewer activates if intended; run as `_ytuploader` |
 | `auth` | `invalid_grant`, expired/revoked consent, 401 after refresh | Owner runs `authorize` again |
 | `channel_mismatch` | Zero, several or a different channel | Do not re-pin without the owner. Check which account consented |
-| `quota` | Quota or rate limit | Wait for reset (midnight Pacific); check quotas in Cloud console |
+| `quota` | Quota, rate limit, or our `daily_upload_cap` | Wait for reset (midnight Pacific); check quotas in Cloud console |
 | `api_permanent` | 4xx such as invalid metadata | Fix the manifest (new approval) |
 | `retries_exhausted` | Repeated 5xx or network errors | Check network; rerun resumes from the saved offset |
 | `uncertain_outcome` | Final bytes may have been sent; cannot confirm a video | See 3.1 |
 | `verification_failed` | Video not Private or on wrong channel | **Immediately** set it to Private/delete in Studio; engage kill switch; investigate |
 | `lock_held` | Another run is active | Wait; check for a stuck process |
+
+A job outside the activation (not in the pilot list, or over the upload count) is *refused*
+(exit code 1, notification) rather than a hard stop; other jobs continue.
 
 ### 3.1 Resolving an uncertain outcome
 The uploader first asks the upload session, then searches the channel's uploads by title and
@@ -161,7 +181,24 @@ upload time. If neither settles it, it stops and will not start any new upload u
 
 ---
 
-## 5. Files
+## 5. Optional scheduled runner (after the pilot)
+
+Only once the reviewer is satisfied with the pilot. As `_ytuploader`, **logged in** (its login
+keychain must be unlocked; keep the session open with fast user switching):
+```bash
+scripts/install_launchd.sh install ~/venv
+```
+- `com.studio.uploader.run`: every 15 min, `run --live --if-active`. Without an active
+  activation or released work it exits with no API call. Otherwise it uploads only released
+  videos within the activation, as Private.
+- `com.studio.uploader.scan`: when the staging folder changes, notifies that renders are ready
+  for a manifest. It prepares and uploads nothing.
+
+Remove with `scripts/install_launchd.sh uninstall`. The kill switch and `deactivate` stop it too.
+
+---
+
+## 6. Files
 
 Under `base_dir` (default `~/StudioUploader`, owned by `_ytuploader`):
 
@@ -176,3 +213,4 @@ Under `base_dir` (default `~/StudioUploader`, owned by `_ytuploader`):
 | `logs/audit-*.jsonl` | Redacted audit log | 0640 |
 | `reports/`, `alerts/` | Per-run report; hard-stop alerts | 0640 |
 | `KILL_SWITCH` | Present = all API calls disabled | |
+| `review-packs/<ts>/` | Evidence for sign-off (redacted) | |

@@ -9,6 +9,8 @@ from __future__ import annotations
 import fcntl
 import json
 import os
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -74,3 +76,46 @@ class Ledger:
             if e.get("approval_id") == approval_id:
                 last = e
         return last
+
+    def starts_today(self, now: datetime | None = None) -> int:
+        """videos.insert sessions started since midnight Pacific (YouTube quota day)."""
+        pacific = ZoneInfo("America/Los_Angeles")
+        now = (now or datetime.now(timezone.utc)).astimezone(pacific)
+        midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        n = 0
+        for e in self.entries():
+            if e.get("status") != "started":
+                continue
+            try:
+                ts = datetime.fromisoformat(e["ts"])
+            except (KeyError, ValueError):
+                continue
+            if ts >= midnight:
+                n += 1
+        return n
+
+    def videos_needing_followup(self) -> dict[str, dict]:
+        """Video IDs whose last known processing state is not final."""
+        latest: dict[str, dict] = {}
+        for e in self.entries():
+            vid = e.get("video_id")
+            if vid and e.get("status") in ("uploaded", "reconciled", "verified"):
+                latest[vid] = e
+        out = {}
+        for vid, e in latest.items():
+            v = e.get("verification") or {}
+            if e.get("status") != "verified" or not is_final(v):
+                out[vid] = e
+        return out
+
+
+FINAL_UPLOAD = {"processed", "rejected", "failed", "deleted"}
+FINAL_PROCESSING = {"succeeded", "failed", "terminated"}
+
+
+def is_final(v: dict) -> bool:
+    if v.get("found") is False:
+        return False
+    return v.get("uploadStatus") in FINAL_UPLOAD and (
+        v.get("uploadStatus") != "processed" or v.get("processingStatus") in FINAL_PROCESSING
+        or v.get("processingStatus") is None)

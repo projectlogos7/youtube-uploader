@@ -14,6 +14,16 @@ chunk_size = 8388608
 # Shown as login_hint on the consent page (informational, not enforced).
 expected_account_hint = "thenousnetwork@gmail.com"
 
+# The restricted macOS user that holds the credential. Live runs refuse to
+# start as any other user.
+expected_user = "_ytuploader"
+
+# Our own cap on uploads per Pacific day (Google allows 100 videos.insert/day).
+daily_upload_cap = 10
+
+# macOS notifications for hard stops, refused jobs and completed uploads.
+notifications = true
+
 [readiness]
 stable_checks = 3
 stable_interval_s = 5.0
@@ -39,3 +49,6 @@ keychain_path = ""
 [oauth]
 # Desktop OAuth client ID from the owner's Google Cloud project (not a secret).
 client_id = ""
+# true while the OAuth app is in Testing: refresh tokens expire after 7 days.
+testing_mode = true
+token_max_age_days = 7.0

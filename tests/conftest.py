@@ -79,14 +79,14 @@ def client_for(cfg: Config, fake: FakeYouTube, audit: AuditLog, *, live: bool) -
                          live=live, retry=cfg.retry, sleep=lambda s: None)
 
 
-def run(cfg: Config, fake: FakeYouTube, *, live: bool = True, offline: bool = False):
+def run(cfg: Config, fake: FakeYouTube, *, live: bool = True, offline: bool = False, **kw):
     audit = AuditLog(cfg.log_dir, echo=io.StringIO())
     client = None if offline else client_for(cfg, fake, audit, live=live)
-    up = Uploader(cfg, client, audit, live=live, offline=offline, sleep=lambda s: None)
+    up = Uploader(cfg, client, audit, live=live, offline=offline, sleep=lambda s: None, **kw)
     return up.run(), audit
 
 
 @pytest.fixture
 def activated(cfg: Config) -> Config:
-    approval.activate(cfg, "Studio Lead", "pilot")
+    approval.activate(cfg, "Studio Lead", "test activation", max_uploads=10)
     return cfg

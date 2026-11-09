@@ -48,6 +48,10 @@ class OAuthConfig:
     auth_uri: str = "https://accounts.google.com/o/oauth2/v2/auth"
     token_uri: str = "https://oauth2.googleapis.com/token"
     revoke_uri: str = "https://oauth2.googleapis.com/revoke"
+    # External apps in Testing publishing status get refresh tokens that expire
+    # after 7 days. Set false once the app is in Production and verified.
+    testing_mode: bool = True
+    token_max_age_days: float = 7.0
 
 
 @dataclass
@@ -60,6 +64,14 @@ class Config:
     keychain: KeychainConfig = field(default_factory=KeychainConfig)
     oauth: OAuthConfig = field(default_factory=OAuthConfig)
     expected_account_hint: str = ""  # shown during consent; informational only
+    # The restricted macOS user the uploader must run as. Live runs refuse to
+    # start as anyone else. Empty disables the check (tests, development).
+    expected_user: str = ""
+    # Our own ceiling on videos.insert calls per Pacific day, below Google's
+    # 100/day Video Uploads bucket. Counted from the ledger.
+    daily_upload_cap: int = 10
+    # macOS notifications to the logged-in reviewer on stops and uploads.
+    notifications: bool = True
 
     # ---- derived paths (all under base_dir) -------------------------------
     @property
@@ -107,6 +119,10 @@ class Config:
         return self.base_dir / "activation.json"
 
     @property
+    def review_packs_dir(self) -> Path:
+        return self.base_dir / "review-packs"
+
+    @property
     def pin_path(self) -> Path:
         return self.base_dir / "channel_pin.json"
 
@@ -152,11 +168,16 @@ def load_config(path: str | os.PathLike) -> Config:
         keychain=_build(KeychainConfig, raw.pop("keychain", None)),
         oauth=_build(OAuthConfig, raw.pop("oauth", None)),
         expected_account_hint=raw.pop("expected_account_hint", ""),
+        expected_user=raw.pop("expected_user", ""),
+        daily_upload_cap=int(raw.pop("daily_upload_cap", 10)),
+        notifications=bool(raw.pop("notifications", True)),
     )
     if raw:
         raise ValueError(f"unknown config keys: {sorted(raw)}")
     if cfg.chunk_size % (256 * 1024) != 0:
         raise ValueError("chunk_size must be a multiple of 256 KiB (resumable protocol)")
+    if not 1 <= cfg.daily_upload_cap <= 100:
+        raise ValueError("daily_upload_cap must be between 1 and 100 (Google's Video Uploads limit)")
     if staging == base or base in staging.parents:
         raise ValueError("staging_dir must not be inside base_dir")
     return cfg

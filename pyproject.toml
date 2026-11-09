@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "studio-uploader"
-version = "0.1.0"
+version = "1.0.0"
 description = "Gated, private-only uploader for the studio YouTube channel"
 requires-python = ">=3.11"
 # Deliberately no runtime dependencies: standard library only, to keep the

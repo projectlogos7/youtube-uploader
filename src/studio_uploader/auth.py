@@ -195,3 +195,24 @@ class OfflineTokenProvider(TokenProvider):
 
     def invalidate(self) -> None:
         pass
+
+
+def token_age_days(store: SecretStore, now: Callable[[], float] = time.time) -> float | None:
+    """Age of the stored refresh token in days, from the consent timestamp."""
+    secret = store.read()
+    if not secret or not secret.get("obtained_at"):
+        return None
+    return (now() - float(secret["obtained_at"])) / 86400.0
+
+
+def check_token_age(age_days: float | None, oauth: OAuthConfig) -> str | None:
+    """Return a warning, or raise AuthError if a Testing-mode token has expired."""
+    if age_days is None or not oauth.testing_mode:
+        return None
+    if age_days >= oauth.token_max_age_days:
+        raise AuthError(f"refresh token is {age_days:.1f} days old; Testing-mode tokens expire after "
+                        f"{oauth.token_max_age_days:.0f} days. Owner must run `authorize` again")
+    if age_days >= oauth.token_max_age_days - 1:
+        return (f"refresh token expires in under a day ({age_days:.1f} of "
+                f"{oauth.token_max_age_days:.0f} days); schedule owner re-consent")
+    return None
