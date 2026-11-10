@@ -1,5 +1,8 @@
 # studio-uploader
 
+> **Just want a folder that uploads everything in it?** Use the one-file version in
+> [simple/](simple/README.md): drop a video in, it goes up as Private.
+
 A small local tool for the studio Mac that uploads reviewer-approved renders to the pinned
 studio YouTube channel as **Private** videos only. Built from the PRD *Studio YouTube Uploader
 (gated, private-only)*.
