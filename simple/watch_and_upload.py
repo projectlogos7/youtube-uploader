@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 """Watch a folder and upload every video in it to YouTube as PRIVATE.
 
-  python3 watch_and_upload.py auth    # once: sign in to the channel's Google account
-  python3 watch_and_upload.py         # run forever (or let launchd keep it running)
+  python3 watch_and_upload.py auth           # once: sign in to the channel's Google account
+  python3 watch_and_upload.py frameio-auth   # once (optional): sign in to Frame.io, pick project
+  python3 watch_and_upload.py                # run forever (or let launchd keep it running)
 
 How it works, every 30 seconds:
   1. Look at every video file in WATCH_FOLDER.
   2. Wait until the file has stopped changing (export finished).
-  3. Upload it as Private (subscribers are not notified). Title = file name.
-  4. Move it to WATCH_FOLDER/Uploaded and write a line to uploaded.log.
+  3. Upload it to YouTube as Private (subscribers are not notified). Title = file name.
+  4. Upload it to Frame.io and make a share link (if Frame.io is set up).
+  5. Move it to WATCH_FOLDER/Uploaded and write both links to uploaded.log.
 
 Standard library only. The sign-in is kept in your macOS login Keychain.
 """
@@ -17,6 +19,9 @@ import base64, hashlib, http.client, http.server, json, os, secrets, shutil
 import subprocess, sys, time, webbrowser
 from datetime import datetime
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import frameio  # noqa: E402
 from urllib.parse import parse_qs, urlencode, urlsplit
 
 # ---------------------------------------------------------------- settings ---
@@ -27,6 +32,8 @@ MADE_FOR_KIDS = False
 CHECK_EVERY   = 30          # seconds between folder checks
 STABLE_FOR    = 20          # file size must not change for this many seconds
 VIDEO_TYPES   = {".mp4", ".mov", ".m4v", ".mkv", ".webm"}
+UPLOAD_TO_YOUTUBE = True
+UPLOAD_TO_FRAMEIO = True    # only used once `frameio-auth` has been run
 # -----------------------------------------------------------------------------
 
 DONE_FOLDER = WATCH_FOLDER / "Uploaded"
@@ -204,39 +211,81 @@ def file_hash(path):
     return h.hexdigest()
 
 
-def already_uploaded(digest):
-    return LOG_FILE.exists() and digest in LOG_FILE.read_text()
+def done_links(digest):
+    """Links already made for this exact file: {"YouTube": url, "Frame.io": url}."""
+    found = {}
+    if LOG_FILE.exists():
+        for line in LOG_FILE.read_text().splitlines():
+            if digest not in line:
+                continue
+            for part in line.split("\t"):
+                if "youtu.be/" in part:
+                    found["YouTube"] = part
+                elif "frame.io" in part or "f.io/" in part:
+                    found["Frame.io"] = part
+    return found
+
+
+def wanted():
+    out = []
+    if UPLOAD_TO_YOUTUBE:
+        out.append("YouTube")
+    if UPLOAD_TO_FRAMEIO and frameio.configured() and frameio_signed_in():
+        out.append("Frame.io")
+    return out
+
+
+def frameio_signed_in():
+    try:
+        frameio._load()
+        return True
+    except frameio.SignInExpired:
+        return False
 
 
 def handle(path):
     digest = file_hash(path)
     DONE_FOLDER.mkdir(exist_ok=True)
-    if already_uploaded(digest):
-        say(f"SKIP  {path.name}: this exact file was uploaded before")
-        shutil.move(str(path), DONE_FOLDER / path.name)
+    links = done_links(digest)
+    if not wanted():
+        say(f"WAITING  {path.name}: no destination is signed in yet")
         return
-    say(f"UPLOADING  {path.name}")
-    video_id = upload(path)
-    with open(LOG_FILE, "a") as log:
-        log.write(f"{datetime.now():%Y-%m-%d %H:%M:%S}\t{path.name}\t{digest}\t"
-                  f"https://youtu.be/{video_id}\n")
+    todo = [d for d in wanted() if d not in links]
+    if not todo:
+        say(f"SKIP  {path.name}: already uploaded ({', '.join(links.values())})")
+    for dest in todo:
+        say(f"UPLOADING  {path.name} -> {dest}")
+        if dest == "YouTube":
+            link = f"https://youtu.be/{upload(path)}"
+        else:
+            link = frameio.upload(path, say)
+        links[dest] = link
+        with open(LOG_FILE, "a") as log:   # written at once, so a crash never repeats an upload
+            log.write(f"{datetime.now():%Y-%m-%d %H:%M:%S}\t{path.name}\t{digest}\t{dest}\t{link}\n")
+        say(f"DONE  {path.name} -> {dest}: {link}" + ("  (Private)" if dest == "YouTube" else ""))
     target = DONE_FOLDER / path.name
     if target.exists():
-        target = DONE_FOLDER / f"{path.stem} {video_id}{path.suffix}"
+        target = DONE_FOLDER / f"{path.stem} {digest[:8]}{path.suffix}"
     shutil.move(str(path), target)
-    say(f"DONE  {path.name} -> https://youtu.be/{video_id} (Private)")
+    (DONE_FOLDER / f"{target.stem} links.txt").write_text(
+        "".join(f"{k}: {v}\n" for k, v in links.items()))
 
 
 def watch():
     WATCH_FOLDER.mkdir(parents=True, exist_ok=True)
-    say(f"Watching {WATCH_FOLDER} (uploads go up as Private). Ctrl+C to stop.")
+    say(f"Watching {WATCH_FOLDER}. Uploading to: {', '.join(wanted()) or 'nothing (sign in first)'}. "
+        "YouTube uploads are Private. Ctrl+C to stop.")
     while True:
         for path in sorted(p for p in WATCH_FOLDER.iterdir() if p.is_file()):
             try:
                 if is_finished(path):
                     handle(path)
             except SignInExpired:
-                say("SIGN-IN EXPIRED. Run:  python3 watch_and_upload.py auth   (will retry in 10 min)")
+                say("YOUTUBE SIGN-IN EXPIRED. Run:  python3 watch_and_upload.py auth   (retrying in 10 min)")
+                time.sleep(600)
+                break
+            except frameio.SignInExpired:
+                say("FRAME.IO SIGN-IN EXPIRED. Run:  python3 watch_and_upload.py frameio-auth   (retrying in 10 min)")
                 time.sleep(600)
                 break
             except Exception as e:  # keep running; the file stays and is retried next round
@@ -245,6 +294,11 @@ def watch():
 
 
 if __name__ == "__main__":
-    if CLIENT_ID.startswith("PASTE-"):
+    if sys.argv[1:] == ["frameio-auth"]:
+        frameio.sign_in()
+    elif UPLOAD_TO_YOUTUBE and CLIENT_ID.startswith("PASTE-"):
         sys.exit("Set CLIENT_ID at the top of this file (or the YT_CLIENT_ID environment variable).")
-    sign_in() if sys.argv[1:] == ["auth"] else watch()
+    elif sys.argv[1:] == ["auth"]:
+        sign_in()
+    else:
+        watch()

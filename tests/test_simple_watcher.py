@@ -21,6 +21,7 @@ def mod(tmp_path, monkeypatch):
     m.CHUNK = 256 * 1024
     m.WATCH_FOLDER.mkdir(parents=True)
     monkeypatch.setattr(m, "keychain_load", lambda: {"refresh_token": "r", "client_secret": "s"})
+    m.UPLOAD_TO_FRAMEIO = False
     monkeypatch.setattr(m.time, "sleep", lambda s: None)
     return m
 
@@ -114,3 +115,116 @@ def test_expired_sign_in(mod, monkeypatch):
     with pytest.raises(mod.SignInExpired):
         mod.handle(p)
     assert p.exists()  # left in place, retried later
+
+
+# ---- Frame.io ------------------------------------------------------------------
+
+class FakeFrameio:
+    def __init__(self, share_ok=True, fail_parts=0):
+        self.share_ok, self.fail_parts = share_ok, fail_parts
+        self.files, self.parts, self.shares = [], [], []
+
+    def __call__(self, method, url, headers=None, body=None):
+        if "adobelogin" in url:
+            return 200, {}, b'{"access_token": "adobe-at", "refresh_token": "r"}'
+        if "s3.example" in url:
+            if self.fail_parts:
+                self.fail_parts -= 1
+                raise OSError("reset")
+            assert headers["x-amz-acl"] == "private" and "Authorization" not in headers
+            self.parts.append(len(body))
+            return 200, {}, b""
+        assert headers["Authorization"] == "Bearer adobe-at"
+        if url.endswith("/files/local_upload"):
+            d = json.loads(body)["data"]
+            self.files.append(d)
+            n = 3
+            size = d["file_size"]
+            per = -(-size // n)
+            urls = [{"size": min(per, size - i * per), "url": f"https://s3.example/p{i}?sig=x"} for i in range(n)]
+            return 201, {}, json.dumps({"data": {"id": "file1", "media_type": "video/mp4", "upload_urls": urls,
+                                                 "view_url": "https://next.frame.io/project/p/view/file1"}}).encode()
+        if url.endswith("/shares"):
+            if not self.share_ok:
+                return 422, {}, b'{"errors": "nope"}'
+            self.shares.append(json.loads(body)["data"])
+            return 201, {}, b'{"data": {"id": "sh1", "short_url": "https://f.io/AbCd"}}'
+        return 404, {}, b"{}"
+
+
+@pytest.fixture
+def fio(mod, monkeypatch):
+    fake = FakeFrameio()
+    monkeypatch.setattr(mod.frameio, "request", fake)
+    monkeypatch.setattr(mod.frameio, "FRAMEIO_CLIENT_ID", "adobe-client")
+    monkeypatch.setattr(mod.frameio, "_load", lambda: {"refresh_token": "r", "client_secret": "s",
+                                                        "account_id": "a", "project_id": "p", "folder_id": "f"})
+    monkeypatch.setattr(mod.frameio, "_save", lambda d: None)
+    monkeypatch.setattr(mod.frameio.time, "sleep", lambda s: None)
+    mod.UPLOAD_TO_FRAMEIO = True
+    return fake
+
+
+def test_uploads_to_youtube_and_frameio_with_links(mod, fio, monkeypatch):
+    yt = Fake()
+    monkeypatch.setattr(mod, "request", yt)
+    p = _video(mod)
+    mod.handle(p)
+    assert yt.videos == 1 and sum(fio.parts) == 700_000
+    assert fio.files[0] == {"name": "Episode 1.mp4", "file_size": 700_000}
+    log = mod.LOG_FILE.read_text()
+    assert "youtu.be/vid1" in log and "https://f.io/AbCd" in log
+    links = (mod.DONE_FOLDER / "Episode 1 links.txt").read_text()
+    assert "YouTube: https://youtu.be/vid1" in links and "Frame.io: https://f.io/AbCd" in links
+
+
+def test_frameio_share_fallback_to_team_link(mod, fio, monkeypatch):
+    fio.share_ok = False
+    monkeypatch.setattr(mod, "request", Fake())
+    mod.handle(_video(mod))
+    assert "https://next.frame.io/project/p/view/file1" in mod.LOG_FILE.read_text()
+
+
+def test_frameio_part_retry(mod, fio, monkeypatch):
+    fio.fail_parts = 2
+    monkeypatch.setattr(mod, "request", Fake())
+    mod.handle(_video(mod))
+    assert sum(fio.parts) == 700_000
+
+
+def test_frameio_failure_does_not_repeat_youtube(mod, fio, monkeypatch):
+    yt = Fake()
+    monkeypatch.setattr(mod, "request", yt)
+    p = _video(mod)
+    real = mod.frameio.upload
+    monkeypatch.setattr(mod.frameio, "upload", lambda *a: (_ for _ in ()).throw(RuntimeError("down")))
+    with pytest.raises(RuntimeError):
+        mod.handle(p)
+    assert p.exists() and yt.videos == 1          # file waits, YouTube done
+    monkeypatch.setattr(mod.frameio, "upload", real)
+    mod.handle(p)
+    assert yt.videos == 1 and len(fio.files) == 1  # only Frame.io retried
+    assert not p.exists()
+
+
+def test_frameio_only(mod, fio, monkeypatch):
+    mod.UPLOAD_TO_YOUTUBE = False
+    yt = Fake()
+    monkeypatch.setattr(mod, "request", yt)
+    mod.handle(_video(mod))
+    assert yt.videos == 0 and len(fio.files) == 1
+
+
+def test_nothing_signed_in_leaves_file(mod, monkeypatch):
+    mod.UPLOAD_TO_YOUTUBE = False
+    p = _video(mod)
+    mod.handle(p)
+    assert p.exists()
+
+
+def test_frameio_expired_sign_in(mod, fio, monkeypatch):
+    def expired(method, url, headers=None, body=None):
+        return 400, {}, b'{"error": "invalid_grant"}'
+    monkeypatch.setattr(mod.frameio, "request", expired)
+    with pytest.raises(mod.frameio.SignInExpired):
+        mod.frameio.access_token()
