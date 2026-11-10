@@ -26,8 +26,7 @@ def _doc(cfg, **kw):
 
 def test_doctor_healthy(cfg):
     cfg.oauth.client_id = "x.apps.googleusercontent.com"
-    cfg.expected_user = "_ytuploader"
-    checks = _doc(cfg, current_user=lambda: "_ytuploader")
+    checks = _doc(cfg)
     fails = [c for c in checks.values() if c.status == "fail"]
     assert fails == [], fails
     assert checks["credential in Keychain"].status == "ok"
@@ -35,10 +34,9 @@ def test_doctor_healthy(cfg):
 
 
 def test_doctor_flags_problems(cfg):
-    cfg.expected_user = "_ytuploader"
     cfg.oauth.client_id = ""
-    checks = _doc(cfg, store=MemoryStore(), current_user=lambda: "arham", which=lambda n: None)
-    for name in ("running as restricted user", "ffprobe available", "lsof available",
+    checks = _doc(cfg, store=MemoryStore(), which=lambda n: None)
+    for name in ("ffprobe available", "lsof available",
                  "credential in Keychain", "OAuth Desktop client ID configured"):
         assert checks[name].status == "fail", name
     assert doctor.summarize(list(checks.values())) == 1
@@ -60,13 +58,11 @@ def test_review_pack(cfg, fake, tmp_path):
     run(cfg, fake, live=False)
     approval.activate(cfg, "Studio Lead", pilot_ids=[job.approval_id])
     run(cfg, fake)
-    iso = tmp_path / "iso.txt"
-    iso.write_text("ok    implementer shell: denied\nPASS: no tested identity could read the credential\n")
     tl = tmp_path / "tests.txt"
     tl.write_text("154 passed, 1 skipped in 6.49s\n")
-    d = reviewpack.build(cfg, doctor.run_doctor(cfg, store=_store()), isolation_evidence=iso, test_log=tl)
+    d = reviewpack.build(cfg, doctor.run_doctor(cfg, store=_store()), test_log=tl)
     summary = (d / "SUMMARY.md").read_text()
-    for line in ("[x] Dry-run evidence", "[x] Channel pinned", "[x] Credential isolation",
+    for line in ("[x] Dry-run evidence", "[x] Channel pinned",
                  "[x] All acceptance tests passing", "[ ] Code and config reviewed"):
         assert line in summary, line
     assert "Latest live run" in summary and "private" in summary
@@ -80,7 +76,7 @@ def test_review_pack(cfg, fake, tmp_path):
 def test_review_pack_unticked_without_evidence(cfg):
     d = reviewpack.build(cfg, doctor.run_doctor(cfg, store=None, system="Linux"))
     s = (d / "SUMMARY.md").read_text()
-    assert "[ ] Dry-run evidence" in s and "[ ] Credential isolation" in s
+    assert "[ ] Dry-run evidence" in s and "[ ] All acceptance tests passing" in s
 
 
 def test_offline_dry_run_does_not_count_as_evidence(cfg, fake):

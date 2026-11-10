@@ -172,7 +172,6 @@ def cmd_review_pack(cfg: Config, args) -> int:
     except (OSError, subprocess.SubprocessError):
         ver = ""
     out = reviewpack.build(cfg, checks, out_dir=Path(args.out) if args.out else None,
-                           isolation_evidence=Path(args.isolation_evidence) if args.isolation_evidence else None,
                            test_log=Path(args.test_log) if args.test_log else None, code_version=ver)
     print(f"Review pack written: {out}\nOpen {out / 'SUMMARY.md'}")
     return 0
@@ -215,7 +214,7 @@ def cmd_resolve(cfg: Config, args) -> int:
 
 
 def cmd_authorize(cfg: Config, args) -> int:
-    print("OWNER STEP. Run this as the restricted uploader user, with the channel owner present.\n"
+    print("OWNER STEP. Run this with the channel owner present, signed in to the channel's Google account.\n"
           "Consent grants youtube.upload and youtube.readonly only. Consent approves no video.")
     secret = getpass.getpass("Desktop OAuth client secret (input hidden): ").strip()
     auth.run_consent(cfg.oauth, HttpTransport(), MacKeychain(cfg.keychain),
@@ -296,7 +295,6 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--json", action="store_true")
     s = sub.add_parser("review-pack", help="collect evidence for the reviewer's sign-off")
     s.add_argument("--out")
-    s.add_argument("--isolation-evidence", help="output of scripts/isolation_check.sh")
     s.add_argument("--test-log", help="output of `pytest -q`")
     sub.add_parser("status", help="show kill switch, activation, pin, in-flight uploads, jobs")
     s = sub.add_parser("resolve", help="REVIEWER: resolve an uncertain outcome")

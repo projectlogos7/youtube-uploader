@@ -2,7 +2,7 @@
 
 Collects, into one timestamped folder: preflight results, the latest dry-run
 report and its audit events, the channel pin, approval/release/activation
-records, ledger, and any evidence files supplied (isolation check, test log).
+records, ledger, and the test log if supplied.
 Writes SUMMARY.md with the PRD's "Done means" checklist pre-filled from that
 evidence. Everything is redacted; the credential is never touched.
 """
@@ -47,7 +47,7 @@ def _events_for(cfg: Config, run_id: str) -> list[dict]:
 
 
 def build(cfg: Config, checks: list[Check], *, out_dir: Path | None = None,
-          isolation_evidence: Path | None = None, test_log: Path | None = None,
+          test_log: Path | None = None,
           code_version: str = "") -> Path:
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     d = Path(out_dir or cfg.review_packs_dir / stamp)
@@ -84,11 +84,6 @@ def build(cfg: Config, checks: list[Check], *, out_dir: Path | None = None,
     if cfg.ledger_path.exists():
         (d / "ledger.jsonl").write_text(redact_text(cfg.ledger_path.read_text()))
 
-    iso_ok = None
-    if isolation_evidence and isolation_evidence.exists():
-        text = redact_text(isolation_evidence.read_text())
-        (d / "isolation-evidence.txt").write_text(text)
-        iso_ok = "PASS" in text and "FAIL" not in text
     tests_ok = None
     if test_log and test_log.exists():
         text = redact_text(test_log.read_text())
@@ -117,8 +112,6 @@ def build(cfg: Config, checks: list[Check], *, out_dir: Path | None = None,
         f"- {box(dry_ok)} Dry-run evidence: run-once log with every check and zero upload requests "
         f"— {note(dry_ok, 'dry-run-report.json, dry-run-audit-events.json', 'no clean online dry run found (offline runs skip the channel check); run `studio-uploader run`')}",
         f"- {box(pin_ok)} Channel pinned and confirmed by the owner — {note(pin_ok, 'channel_pin.json', 'not pinned')}",
-        f"- {box(iso_ok)} Credential isolation demonstrated — "
-        f"{note(iso_ok, 'isolation-evidence.txt', 'supply --isolation-evidence from scripts/isolation_check.sh')}",
         f"- {box(tests_ok)} All acceptance tests passing — {note(tests_ok, 'test-log.txt', 'supply --test-log from `pytest -q`')}",
         "- [x] Approval record template and manifest schema in place — templates/approval_record.md, schemas/manifest.schema.json",
         f"- {box(runbook.exists())} Disable and revocation runbook written — docs/RUNBOOK.md",

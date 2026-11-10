@@ -6,7 +6,6 @@ before the pilot and in the review pack.
 
 from __future__ import annotations
 
-import getpass
 import os
 import platform
 import shutil
@@ -31,8 +30,7 @@ class Check:
     detail: str = ""
 
 
-def run_doctor(cfg: Config, *, store=None, current_user: Callable[[], str] = getpass.getuser,
-               which: Callable[[str], str | None] = shutil.which,
+def run_doctor(cfg: Config, *, store=None, which: Callable[[str], str | None] = shutil.which,
                system: str | None = None) -> list[Check]:
     system = system or platform.system()
     out: list[Check] = []
@@ -42,12 +40,6 @@ def run_doctor(cfg: Config, *, store=None, current_user: Callable[[], str] = get
 
     add("python >= 3.11", sys.version_info >= (3, 11), platform.python_version())
     add("running on macOS", system == "Darwin", system, bad="warn")
-
-    if cfg.expected_user:
-        add("running as restricted user", current_user() == cfg.expected_user,
-            f"current={current_user()} expected={cfg.expected_user}")
-    else:
-        out.append(Check("running as restricted user", "warn", "expected_user is not set in config"))
 
     for tool, path in (("ffprobe", cfg.readiness.ffprobe_path), ("lsof", cfg.readiness.lsof_path)):
         add(f"{tool} available", which(path) is not None, which(path) or "not found")

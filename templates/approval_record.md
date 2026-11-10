@@ -12,7 +12,6 @@ also writes machine records (`frozen/<id>/approval.json`, `releases/<id>.json`,
 | Date (UTC) | |
 | Code version (git commit) | |
 | Dry-run evidence file reviewed | |
-| Credential isolation evidence reviewed | |
 | Pinned channel title / ID (as confirmed by owner) | |
 | OAuth mode: Production-verified **or** Testing with weekly re-consent | |
 | Kill switch tested (`studio-uploader kill`, then `status`) | yes / no |

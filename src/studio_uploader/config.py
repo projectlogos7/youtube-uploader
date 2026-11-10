@@ -37,8 +37,7 @@ class RetryConfig:
 class KeychainConfig:
     service: str = "studio-uploader.youtube"
     account: str = "channel-owner"
-    # Path to the restricted uploader user's keychain. Empty = default keychain
-    # of the user running the process (which must be the restricted user).
+    # Path to a specific keychain file. Empty = your login keychain.
     keychain_path: str = ""
 
 
@@ -64,9 +63,6 @@ class Config:
     keychain: KeychainConfig = field(default_factory=KeychainConfig)
     oauth: OAuthConfig = field(default_factory=OAuthConfig)
     expected_account_hint: str = ""  # shown during consent; informational only
-    # The restricted macOS user the uploader must run as. Live runs refuse to
-    # start as anyone else. Empty disables the check (tests, development).
-    expected_user: str = ""
     # Our own ceiling on videos.insert calls per Pacific day, below Google's
     # 100/day Video Uploads bucket. Counted from the ledger.
     daily_upload_cap: int = 10
@@ -168,7 +164,6 @@ def load_config(path: str | os.PathLike) -> Config:
         keychain=_build(KeychainConfig, raw.pop("keychain", None)),
         oauth=_build(OAuthConfig, raw.pop("oauth", None)),
         expected_account_hint=raw.pop("expected_account_hint", ""),
-        expected_user=raw.pop("expected_user", ""),
         daily_upload_cap=int(raw.pop("daily_upload_cap", 10)),
         notifications=bool(raw.pop("notifications", True)),
     )

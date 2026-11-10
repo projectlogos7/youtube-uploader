@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
-  OPTIONAL scheduled runner. Installed as a LaunchAgent of the restricted user
-  (_ytuploader) by scripts/install_launchd.sh. It runs `run live if-active`
+  OPTIONAL scheduled runner. Installed as a LaunchAgent of the logged-in user
+  by scripts/install_launchd.sh. It runs `run live if-active`
   every 15 minutes:
     * not activated, or nothing released  -> exits at once, no API call
     * otherwise it uploads ONLY videos the reviewer approved AND released, within
       the activation's scope, upload count and expiry, always as Private.
   The kill switch stops it before the next request. Unload with
-  `launchctl bootout gui/$(id -u _ytuploader)/com.studio.uploader.run`.
+  `launchctl bootout gui/$(id -u)/com.studio.uploader.run`.
 -->
 <plist version="1.0">
 <dict>

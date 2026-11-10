@@ -10,13 +10,12 @@ Order of a run (each step logged):
  6. resume interrupted uploads before new ones
  12. follow up processing status of earlier uploads (read-only)
 
-Live runs also enforce: the restricted macOS user, the activation's expiry,
+Live runs also enforce: the activation's expiry,
 pilot scope and upload count, the daily upload cap, and Testing-mode token age.
 """
 
 from __future__ import annotations
 
-import getpass
 import json
 import mimetypes
 import time
@@ -64,7 +63,6 @@ class Uploader:
                  live: bool, offline: bool = False, sleep: Callable[[float], None] = time.sleep,
                  notifier: Notifier = null_notifier,
                  token_age_days: Callable[[], float | None] | None = None,
-                 current_user: Callable[[], str] = getpass.getuser,
                  skip_if_idle: bool = False, followup_only: bool = False):
         if live and offline:
             raise ValueError("live mode cannot be offline")
@@ -80,7 +78,6 @@ class Uploader:
         self.sleep = sleep
         self.notify = notifier
         self.token_age_days = token_age_days
-        self.current_user = current_user
         self.skip_if_idle = skip_if_idle
         self.followup_only = followup_only
         self.activation: dict | None = None
@@ -105,9 +102,6 @@ class Uploader:
         try:
             self.killswitch.check()
             self.audit.info("check.kill_switch", engaged=False)
-            if self.live and self.cfg.expected_user and self.current_user() != self.cfg.expected_user:
-                raise LiveModeNotActivated(f"live runs must run as the restricted user "
-                                           f"{self.cfg.expected_user!r}, not {self.current_user()!r}")
             if self.skip_if_idle and self._idle():
                 self.result.idle = True
                 self.audit.info("run.idle", note="no activation or no released work; no API calls made")

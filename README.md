@@ -19,14 +19,28 @@ reviewer action: see [docs/PILOT.md](docs/PILOT.md).
   `videos.update`, so it cannot change privacy or publish.
 - Does not do thumbnails, playlists, captions or scheduling, and never publishes.
 
-## Install
+## Quick start (studio Mac)
 
-Python 3.11+, no runtime dependencies (standard library only). `ffprobe` and `lsof` must be on PATH.
+1. **Install**
+   ```bash
+   brew install python@3.12 ffmpeg
+   git clone https://github.com/projectlogos7/youtube-uploader.git ~/youtube-uploader
+   cd ~/youtube-uploader && python3.12 -m venv .venv && source .venv/bin/activate
+   pip install -e ".[dev]" && pytest -q
+   ```
+2. **Google Cloud** (owner's account): enable YouTube Data API v3, set up the OAuth consent
+   screen with scopes `youtube.upload` + `youtube.readonly`, create a **Desktop app** OAuth client.
+3. **Config**: `cp config/config.example.toml ~/.config/studio-uploader/config.toml`, then set
+   `staging_dir` and `oauth.client_id`.
+4. **Sign in** (owner): `studio-uploader authorize` → paste client secret → allow in browser.
+5. **Pin channel** (owner): `studio-uploader pin` → type the channel ID to confirm.
+6. **Check**: `studio-uploader doctor`, then `studio-uploader run` (dry run, 0 uploads).
+7. **Pilot**: reviewer follows [docs/PILOT.md](docs/PILOT.md).
 
-```bash
-pip install -e ".[dev]"
-pytest -q
-```
+Then per video: `prepare` → reviewer fills the draft → `approve` → `release` → `activate`
+→ `run --live` → publish by hand in YouTube Studio if wanted.
+
+Full details: [docs/RUNBOOK.md](docs/RUNBOOK.md).
 
 ## Commands
 
@@ -42,7 +56,7 @@ pytest -q
 | `run --live [--if-active]` | reviewer / scheduler | Upload released jobs as Private, verify, report |
 | `followup` | anyone | Re-check processing/rejection status of uploaded videos (read-only) |
 | `doctor [--json]` | anyone | Preflight: user, tools, permissions, credential present, token age, pin, quota |
-| `review-pack [--isolation-evidence F] [--test-log F]` | implementer | Evidence folder + pre-ticked "Done means" checklist |
+| `review-pack [--test-log F]` | implementer | Evidence folder + pre-ticked "Done means" checklist |
 | `resolve <id> --video-id X \| --not-uploaded` | reviewer | Settle an uncertain outcome |
 | `kill [--reason]` / `unkill` | anyone / reviewer | Kill switch |
 | `status` | anyone | Kill switch, activation, pin, in-flight uploads, jobs |
@@ -73,7 +87,7 @@ src/studio_uploader/
   notify.py       macOS notifications to the reviewer
   ledger.py state.py lock.py killswitch.py audit.py redact.py fsutil.py
 tests/            all against a mocked YouTube API (tests/fake_youtube.py)
-scripts/          isolation_check.sh, dry_run_evidence.sh, install_launchd.sh
+scripts/          dry_run_evidence.sh, install_launchd.sh
 templates/launchd optional LaunchAgents (scheduled run, staging watcher)
 ```
 
@@ -82,7 +96,7 @@ templates/launchd optional LaunchAgents (scheduled run, staging watcher)
 | PRD item | Code | Tests |
 | --- | --- | --- |
 | FR-1 Owner authorization | `auth.py` | `test_client_auth.py` (PKCE, scopes, loopback, state, invalid_grant) |
-| FR-2 Credential isolation | `keychain.py`, runbook §1.2 | `scripts/isolation_check.sh`, `test_credential_isolation.py` (studio Mac only) |
+| FR-2 Credential storage | `keychain.py` (login Keychain, secrets via stdin) | `test_logs_reports_ledger_contain_no_secrets`, `test_repo_contains_no_secrets` |
 | FR-3 Channel pinning | `pinning.py`, `cli.py pin` | `test_channel_mismatch_hard_stop[*]`, `test_no_pin_is_hard_stop` |
 | FR-4 Staging queue | `staging.py` | `test_staging.py` (growing, open, temp names, truncated, marker, real ffprobe/lsof) |
 | FR-5 Approval manifest | `manifest.py`, `approval.py` | `test_manifest.py`, changed manifest/file tests |
@@ -101,7 +115,6 @@ templates/launchd optional LaunchAgents (scheduled run, staging watcher)
 | Approval level 3: bounded activation, pilot scope | `approval.activate`, `check_activation_scope` | `test_final_phase.py` (pilot scope, count, expiry, resume not double-counted) |
 | Quota (100 uploads/day) | `daily_upload_cap`, `Ledger.starts_today` | `test_daily_upload_cap`, `test_starts_today_boundary` |
 | 7-day Testing-mode tokens | `auth.check_token_age` | `test_token_age_rules`, `test_expired_testing_token_stops_before_any_call` |
-| Restricted macOS identity | `expected_user` | `test_live_refuses_wrong_macos_user` |
 | FR-7 processing outcome over time | `Uploader._followups`, `followup` | `test_followup_*` |
 | Alert the reviewer | `notify.py`, `alerts/` | `test_notifications_on_stop_and_upload` |
 | M6 review pack | `doctor.py`, `reviewpack.py` | `test_doctor_reviewpack.py` |
@@ -117,7 +130,10 @@ publishing. Any of these would need a new PRD approval and new scopes.
 
 - Approval and release records are local files. The code checks they exist and match the
   manifest digest and file hash, but it cannot prove *who* wrote them. Keep `frozen/`,
-  `releases/` and `activation.json` writable only by the restricted user, and have the
+  `releases/` and `activation.json` writable only by your Mac user, and have the
   reviewer run those commands themselves.
+- The credential is in your login Keychain, not a separate macOS user (simplified from the
+  PRD's FR-2). Programs running under your Mac account could ask the Keychain for it, so don't
+  give AI agents or untrusted scripts shell access on this account.
 - The reconcile channel search matches by exact title, upload time and file size. If that is
   ambiguous it stops for the reviewer rather than guessing.

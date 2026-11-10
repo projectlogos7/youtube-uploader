@@ -1,14 +1,13 @@
 # M7 pilot procedure (Level 3)
 
-The pilot is one Private upload of one reviewer-chosen test file. It is done by the
-**reviewer** on the studio Mac, as the restricted user. No AI agent runs any step
-below or holds the credential. The test file is **not** *Sharjeel Final v2*.
+The pilot is one Private upload of one reviewer-chosen test file, done by the
+**reviewer** on the studio Mac. No AI agent runs any step below. The test file is **not** *Sharjeel Final v2*.
 
 Estimated time: 30–45 minutes, plus YouTube processing time.
 
 ## Entry criteria (all required)
 
-- [ ] Review pack signed off (M6): `studio-uploader review-pack --isolation-evidence … --test-log …`,
+- [ ] Review pack signed off (M6): `studio-uploader review-pack --test-log …`,
       every box in `SUMMARY.md` ticked, and "Code and config reviewed" ticked by the reviewer.
 - [ ] `studio-uploader doctor` shows no `FAIL`.
 - [ ] OAuth decision recorded: Production-verified, **or** Testing mode with the refresh token
@@ -18,7 +17,7 @@ Estimated time: 30–45 minutes, plus YouTube processing time.
 
 ## Steps
 
-All commands as `_ytuploader` (`sudo -u _ytuploader -i`, or its GUI session).
+All commands in Terminal on the studio Mac, with the venv active.
 
 1. **Kill switch drill.** `studio-uploader kill --reason "pilot drill"` → `studio-uploader status`
    shows `"kill_switch": true` → `studio-uploader run` stops with `kill_switch` and 0 API calls →

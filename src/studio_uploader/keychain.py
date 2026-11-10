@@ -1,10 +1,8 @@
 """Credential storage in the macOS Keychain (FR-2).
 
 The refresh token and OAuth client secret are stored together as one generic
-password item. Intended deployment: the uploader runs as a dedicated, restricted
-macOS user (e.g. ``_ytuploader``) whose login keychain only that user can open,
-so Claude, Grok, the implementer's shell and other scripts running as other
-users cannot read it. See docs/RUNBOOK.md and scripts/isolation_check.sh.
+password item in the login keychain of the Mac user who runs the uploader.
+The token is never written to the repo, config, logs or environment.
 
 Secrets are passed to ``security`` on stdin (``security -i``), never on argv,
 so they do not appear in ``ps`` output.

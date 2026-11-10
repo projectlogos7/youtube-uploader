@@ -1,5 +1,5 @@
 # studio-uploader configuration. Copy to ~/.config/studio-uploader/config.toml
-# (in the restricted uploader user's home). This file holds NO secrets.
+# This file holds NO secrets.
 # The refresh token and OAuth client secret live only in the Keychain.
 
 # Where the uploader keeps its frozen files, ledger, state, logs and reports.
@@ -13,10 +13,6 @@ chunk_size = 8388608
 
 # Shown as login_hint on the consent page (informational, not enforced).
 expected_account_hint = "thenousnetwork@gmail.com"
-
-# The restricted macOS user that holds the credential. Live runs refuse to
-# start as any other user.
-expected_user = "_ytuploader"
 
 # Our own cap on uploads per Pacific day (Google allows 100 videos.insert/day).
 daily_upload_cap = 10
@@ -43,7 +39,7 @@ max_delay_s = 64.0
 [keychain]
 service = "studio-uploader.youtube"
 account = "channel-owner"
-# Leave empty to use the restricted user's login keychain.
+# Leave empty to use your login keychain.
 keychain_path = ""
 
 [oauth]

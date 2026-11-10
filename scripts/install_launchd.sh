@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
-# Install (or remove) the optional LaunchAgents for the restricted uploader user.
-# Run AS the restricted user, inside its logged-in GUI session (fast user
-# switching): the login keychain holding the credential is only unlocked while
-# that user is logged in.
+# Install (or remove) the optional LaunchAgents for the current Mac user.
+# The login keychain holding the credential must be unlocked, so the user
+# must be logged in for scheduled runs to work.
 #
 #   scripts/install_launchd.sh install  [venv_dir] [staging_dir]
 #   scripts/install_launchd.sh uninstall

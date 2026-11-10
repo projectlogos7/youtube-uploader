@@ -1,5 +1,5 @@
-"""Level 3 / pilot controls: activation scope and expiry, daily cap, restricted
-user, token age, idle scheduled runs, processing follow-up, notifications."""
+"""Level 3 / pilot controls: activation scope and expiry, daily cap,
+token age, idle scheduled runs, processing follow-up, notifications."""
 
 from __future__ import annotations
 
@@ -106,16 +106,6 @@ def test_starts_today_boundary(tmp_path):
                {"ts": "2026-11-09T08:01:00+00:00", "status": "started"}]   # 00:01 PST Nov 9
     p.write_text("".join(json.dumps(e) + "\n" for e in entries))
     assert led.starts_today(datetime(2026, 11, 9, 12, 0, tzinfo=timezone.utc)) == 1
-
-
-def test_live_refuses_wrong_macos_user(activated, fake):
-    activated.expected_user = "_ytuploader"
-    make_job(activated)
-    res, _ = run(activated, fake, current_user=lambda: "arham")
-    assert res.hard_stop["code"] == "not_activated" and "_ytuploader" in res.hard_stop["reason"]
-    assert fake.calls == []
-    res, _ = run(activated, fake, current_user=lambda: "_ytuploader")
-    assert res.exit_code == 0
 
 
 def test_token_age_rules():
