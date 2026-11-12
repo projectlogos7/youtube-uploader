@@ -1,0 +1,6 @@
+.git
+tests
+watch
+.env
+__pycache__
+*.pyc

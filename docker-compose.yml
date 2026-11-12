@@ -1,0 +1,18 @@
+# Use ./start.sh (or ./start.sh --wifi) rather than calling docker compose directly.
+services:
+  uploader:
+    build: .
+    container_name: media-uploader
+    restart: unless-stopped
+    ports:
+      - "${LISTEN_ON:-127.0.0.1}:8765:8765"     # 127.0.0.1 = this computer only; 0.0.0.0 = your network
+    volumes:
+      - "${WATCH_FOLDER:-./watch}:/watch"       # the folder to watch (set WATCH_FOLDER in .env)
+      - uploader-data:/data                     # settings, sign-ins, history
+    environment:
+      LAN_ACCESS: "${LAN_ACCESS:-0}"
+      SERVER_URL: "${SERVER_URL:-}"
+      FOLDER_LABEL: "${WATCH_FOLDER:-./watch}"   # shown in the page
+
+volumes:
+  uploader-data:

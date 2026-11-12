@@ -1,0 +1,386 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Media Uploader</title>
+<style>
+  :root {
+    --bg: #f5f5f4; --card: #ffffff; --text: #1c1917; --muted: #78716c; --line: #e7e5e4;
+    --accent: #2563eb; --ok: #15803d; --warn: #b45309; --bad: #b91c1c; --field: #fafaf9;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0c0a09; --card: #1c1917; --text: #f5f5f4; --muted: #a8a29e; --line: #292524;
+            --accent: #60a5fa; --ok: #4ade80; --warn: #fbbf24; --bad: #f87171; --field: #0c0a09; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 920px; margin: 0 auto; padding: 24px 16px 48px; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+  h1 { font-size: 22px; margin: 0; }
+  h2 { font-size: 15px; margin: 0 0 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px; margin-bottom: 16px; }
+  .grid .card { margin-bottom: 0; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; }
+  .row + .row { border-top: 1px solid var(--line); }
+  .muted { color: var(--muted); font-size: 13px; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .on .dot { background: var(--ok); } .warn .dot { background: var(--warn); } .bad .dot { background: var(--bad); }
+  label.field { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+  input[type=text], input[type=password], select, textarea {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--field); color: var(--text); font: inherit; }
+  button { font: inherit; font-weight: 600; border: 1px solid var(--line); background: var(--field);
+           color: var(--text); padding: 7px 14px; border-radius: 8px; cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: .5; cursor: default; }
+  .actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  /* switch */
+  .switch { position: relative; width: 52px; height: 30px; flex: none; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider { position: absolute; inset: 0; background: var(--line); border-radius: 30px; transition: .2s; cursor: pointer; }
+  .slider:before { content: ""; position: absolute; width: 24px; height: 24px; left: 3px; top: 3px;
+                   background: #fff; border-radius: 50%; transition: .2s; box-shadow: 0 1px 2px rgba(0,0,0,.3); }
+  .switch input:checked + .slider { background: var(--ok); }
+  .switch input:checked + .slider:before { transform: translateX(22px); }
+  .switch.small { width: 42px; height: 24px; }
+  .switch.small .slider:before { width: 18px; height: 18px; }
+  .switch.small input:checked + .slider:before { transform: translateX(18px); }
+  .bar { height: 8px; background: var(--line); border-radius: 8px; overflow: hidden; margin-top: 8px; }
+  .bar > div { height: 100%; background: var(--accent); width: 0; transition: width .4s; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  td, th { text-align: left; padding: 8px 6px; border-top: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12px; color: var(--muted); font-weight: 600; border-top: 0; }
+  td.link { word-break: break-all; }
+  a { color: var(--accent); }
+  .banner { padding: 10px 14px; border-radius: 10px; margin-bottom: 16px; font-weight: 600; }
+  .banner.ok { background: color-mix(in srgb, var(--ok) 15%, transparent); }
+  .banner.bad { background: color-mix(in srgb, var(--bad) 15%, transparent); }
+  .hidden { display: none !important; }
+  code { font-size: 13px; background: var(--field); padding: 1px 5px; border-radius: 5px; border: 1px solid var(--line); }
+  ol.steps { margin: 6px 0 0; padding-left: 20px; font-size: 13px; color: var(--muted); }
+  .err { color: var(--bad); }
+  .drop { border: 2px dashed var(--line); border-radius: 12px; padding: 22px; text-align: center; cursor: pointer; }
+  .drop.over { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+  pre.cmd { white-space: pre-wrap; word-break: break-all; background: var(--field); border: 1px solid var(--line);
+            border-radius: 8px; padding: 10px; font-size: 12.5px; margin: 6px 0 0; }
+  .comp { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+  .comp:first-of-type { border-top: 0; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1>Media Uploader</h1>
+      <div class="muted" id="sub">Loading…</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <span class="pill" id="watchPill"><span class="dot"></span><span id="watchText">Off</span></span>
+      <label class="switch" title="Turn the watcher on or off">
+        <input type="checkbox" id="enabled"><span class="slider"></span>
+      </label>
+    </div>
+  </header>
+
+  <div id="banner" class="banner hidden"></div>
+
+  <section class="card">
+    <h2>Watcher</h2>
+    <div class="row">
+      <div><div>Folder</div><div class="muted" id="folder">–</div></div>
+      <button id="scanBtn">Check now</button>
+    </div>
+    <div class="row">
+      <div><div>Upload to YouTube</div><div class="muted">Videos only, always Private, subscribers not notified</div></div>
+      <label class="switch small"><input type="checkbox" id="to_youtube"><span class="slider"></span></label>
+    </div>
+    <div class="row">
+      <div><div>Upload to Frame.io</div><div class="muted" id="fioDestNote">Any media, with a share link</div></div>
+      <label class="switch small"><input type="checkbox" id="to_frameio"><span class="slider"></span></label>
+    </div>
+    <div id="notice" class="muted err" style="margin-top:8px"></div>
+  </section>
+
+  <section class="card" id="currentCard">
+    <h2>Now</h2>
+    <div id="current" class="muted">Nothing uploading.</div>
+    <div class="bar hidden" id="barWrap"><div id="bar"></div></div>
+    <div id="files" style="margin-top:10px"></div>
+  </section>
+
+  <section class="card">
+    <h2>Send files from this computer</h2>
+    <div class="drop" id="drop">
+      <b>Drop media files here</b> or click to choose.
+      <div class="muted">They go into the watch folder and upload like any other file.</div>
+      <input type="file" id="pick" multiple class="hidden">
+    </div>
+    <div id="sending" class="muted" style="margin-top:8px"></div>
+  </section>
+
+  <section class="card">
+    <h2>Computers</h2>
+    <div id="lanOff" class="muted hidden">
+      Only this computer can open this page right now. To let other computers on your Wi‑Fi use it,
+      start it with <code>./start.sh --wifi</code>.
+    </div>
+    <div id="computers" class="muted">No other computers added yet.</div>
+    <div class="actions"><button id="addComp">Add a computer</button></div>
+    <div id="addHelp" class="hidden">
+      <p class="muted" style="margin:12px 0 0">On the other computer, open <b>Terminal</b> and paste these two lines.
+        Change the folder if you like. It will watch that folder and send finished files here.</p>
+      <pre class="cmd" id="cmd"></pre>
+      <div class="actions"><button id="copyCmd">Copy</button></div>
+      <p class="muted">The other computer must be on the same Wi‑Fi. Files it sends are moved to a <b>Sent</b>
+        folder there. To stop it later, click <b>Remove</b> here.</p>
+    </div>
+  </section>
+
+  <div class="grid" style="margin-bottom:16px">
+    <!-- YouTube -->
+    <section class="card">
+      <h2>YouTube</h2>
+      <div class="pill" id="ytPill"><span class="dot"></span><span id="ytText">Not connected</span></div>
+      <div id="ytConnected" class="hidden">
+        <div class="actions"><button id="ytDisconnect">Disconnect</button></div>
+      </div>
+      <div id="ytForm">
+        <ol class="steps">
+          <li>In Google Cloud: enable <b>YouTube Data API v3</b>, set up the OAuth consent screen, add your channel's Gmail as a test user.</li>
+          <li>Create an <b>OAuth client ID → Desktop app</b>. Paste its ID and secret here.</li>
+        </ol>
+        <label class="field">Client ID</label><input type="text" id="ytId" autocomplete="off">
+        <label class="field">Client secret</label><input type="password" id="ytSecret" autocomplete="off">
+        <div class="actions"><button class="primary" id="ytConnect">Connect YouTube</button></div>
+      </div>
+      <div id="ytPaste" class="hidden">
+        <p class="muted">Sign in in the tab that opened. On the computer running Media Uploader this finishes by itself.
+          On any other computer you'll end on an error page at <b>localhost</b>: copy the <b>whole address</b>
+          from that tab and paste it here.</p>
+        <textarea id="ytAddress" rows="3" placeholder="http://localhost:8765/?state=…&code=…"></textarea>
+        <div class="actions"><button class="primary" id="ytFinish">Finish</button><button id="ytCancel">Cancel</button></div>
+      </div>
+    </section>
+
+    <!-- Frame.io -->
+    <section class="card">
+      <h2>Frame.io</h2>
+      <div class="pill" id="fioPill"><span class="dot"></span><span id="fioText">Not connected</span></div>
+      <div id="fioConnected" class="hidden">
+        <label class="field">Upload into project</label>
+        <select id="fioProject"><option value="">Loading projects…</option></select>
+        <div class="actions"><button id="fioDisconnect">Disconnect</button></div>
+      </div>
+      <div id="fioForm">
+        <ol class="steps">
+          <li>At <b>developer.adobe.com/console</b>: new project → add <b>Frame.io API</b> → <b>OAuth Web App</b>.</li>
+          <li>Set both redirect fields to <code>https://localhost</code>. Paste the ID and secret here.</li>
+        </ol>
+        <label class="field">Client ID</label><input type="text" id="fioId" autocomplete="off">
+        <label class="field">Client secret</label><input type="password" id="fioSecret" autocomplete="off">
+        <div class="actions"><button class="primary" id="fioConnect">Connect Frame.io</button></div>
+      </div>
+      <div id="fioPaste" class="hidden">
+        <p class="muted">Sign in in the tab that opened. You'll end on an error page at <b>localhost</b>.
+          That's expected: copy the <b>whole address</b> from that tab's address bar and paste it here.</p>
+        <textarea id="fioAddress" rows="3" placeholder="https://localhost/?code=…"></textarea>
+        <div class="actions"><button class="primary" id="fioFinish">Finish</button><button id="fioCancel">Cancel</button></div>
+      </div>
+    </section>
+  </div>
+
+  <section class="card">
+    <h2>History</h2>
+    <div id="history" class="muted">No uploads yet.</div>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let S = null, projectsLoaded = false, fioPasting = false, ytPasting = false;
+
+async function api(path, body) {
+  const r = await fetch(path, body === undefined ? {} : {
+    method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || ("Error " + r.status));
+  return data;
+}
+function banner(text, ok) {
+  const b = $("banner"); b.textContent = text; b.className = "banner " + (ok ? "ok" : "bad");
+  clearTimeout(banner.t); banner.t = setTimeout(() => b.classList.add("hidden"), ok ? 5000 : 12000);
+}
+function pill(el, cls, text, textEl) { el.className = "pill " + cls; textEl.textContent = text; }
+function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+async function act(btn, fn) {
+  btn.disabled = true;
+  try { await fn(); await refresh(); } catch (e) { banner(e.message, false); } finally { btn.disabled = false; }
+}
+
+function render() {
+  const s = S;
+  $("enabled").checked = s.enabled;
+  pill($("watchPill"), s.enabled ? "on" : "", s.enabled ? "Watching" : "Off", $("watchText"));
+  $("sub").textContent = s.enabled ? `Last checked ${s.last_scan || "–"}` : "Watcher is off. Turn it on to start uploading.";
+  $("folder").textContent = s.watch_dir + (s.watch_dir_ok ? "" : "  (not found)");
+  $("to_youtube").checked = s.to_youtube;
+  $("to_frameio").checked = s.to_frameio;
+  $("notice").textContent = s.enabled ? (s.notice || "") : "";
+
+  // current upload
+  if (s.current) {
+    $("current").innerHTML = `Uploading <b>${esc(s.current.file)}</b> to ${esc(s.current.dest)} — ${s.current.pct}%`;
+    $("barWrap").classList.remove("hidden"); $("bar").style.width = s.current.pct + "%";
+  } else { $("current").textContent = "Nothing uploading."; $("barWrap").classList.add("hidden"); }
+  const files = Object.entries(s.files || {});
+  $("files").innerHTML = files.length ? `<table><tr><th>In folder</th><th>Status</th></tr>${
+    files.map(([f, st]) => `<tr><td>${esc(f)}</td><td class="muted">${esc(st)}</td></tr>`).join("")}</table>` : "";
+
+  // YouTube
+  const yt = s.youtube;
+  pill($("ytPill"), yt.connected ? "on" : "", yt.connected ? `Connected${yt.channel ? " · " + yt.channel : ""}` : "Not connected", $("ytText"));
+  $("ytConnected").classList.toggle("hidden", !yt.connected);
+  if (yt.connected) ytPasting = false;
+  $("ytForm").classList.toggle("hidden", yt.connected || ytPasting);
+  $("ytPaste").classList.toggle("hidden", !ytPasting);
+  if (!$("ytId").value && yt.client_id) $("ytId").value = yt.client_id;
+  $("ytConnect").textContent = yt.client_id && !yt.connected ? "Reconnect YouTube" : "Connect YouTube";
+
+  // Frame.io
+  const f = s.frameio;
+  pill($("fioPill"), f.ready ? "on" : (f.connected ? "warn" : ""),
+       f.ready ? `Connected · ${f.project}` : (f.connected ? "Connected · pick a project" : "Not connected"), $("fioText"));
+  $("fioConnected").classList.toggle("hidden", !f.connected);
+  $("fioForm").classList.toggle("hidden", f.connected || fioPasting);
+  $("fioPaste").classList.toggle("hidden", !fioPasting);
+  if (!$("fioId").value && f.client_id) $("fioId").value = f.client_id;
+  $("fioDestNote").textContent = f.ready ? `Any media, into "${f.project}", with a share link` : "Any media, with a share link";
+  if (f.connected && !projectsLoaded) loadProjects();
+
+  // computers
+  $("lanOff").classList.toggle("hidden", s.lan);
+  $("addComp").classList.toggle("hidden", !s.lan);
+  if (!s.lan) $("addHelp").classList.add("hidden");
+  const server = s.server_url || location.origin;
+  $("cmd").textContent = `curl -fsSL ${server}/agent.py -o ~/media-agent.py\n` +
+    `python3 ~/media-agent.py --server ${server} --folder ~/Movies/Upload --install`;
+  const cs = s.computers || [];
+  $("computers").innerHTML = cs.length ? cs.map(c => `<div class="comp"><div>
+      <span class="pill ${c.online ? "on" : ""}"><span class="dot"></span>${esc(c.name)}</span>
+      <div class="muted">${esc(c.folder)}</div>
+      <div class="muted">${c.online ? "Online" : "Last seen " + esc(c.last_seen)} · ${c.sent} sent${
+        c.waiting.length ? " · " + c.waiting.length + " in its folder" : ""}</div></div>
+      <div><button data-remove="${esc(c.id)}">Remove</button></div></div>`).join("")
+    : (s.lan ? "No other computers added yet." : "");
+
+  // history
+  const h = s.history || [];
+  $("history").innerHTML = h.length ? `<table><tr><th>When</th><th>File</th><th>Where</th><th>Link</th></tr>${
+    h.map(r => `<tr><td class="muted">${esc(r.time)}</td><td>${esc(r.file)}${r.source ? `<div class="muted">from ${esc(r.source)}</div>` : ""}</td><td>${esc(r.dest === "youtube" ? "YouTube" : "Frame.io")}</td>
+      <td class="link">${r.status === "ok" ? `<a href="${esc(r.link)}" target="_blank" rel="noopener">${esc(r.link)}</a>`
+                                         : `<span class="err">${esc(r.error)}</span>`}</td></tr>`).join("")}</table>` : "No uploads yet.";
+}
+
+async function loadProjects() {
+  projectsLoaded = true;
+  try {
+    const {projects} = await api("/api/frameio/projects");
+    const sel = $("fioProject");
+    sel.innerHTML = `<option value="">— choose a project —</option>` +
+      projects.map(p => `<option value="${esc(p.project_id)}">${esc(p.label)}</option>`).join("");
+    const cur = projects.find(p => p.name === S.frameio.project);
+    if (cur) sel.value = cur.project_id;
+  } catch (e) { $("fioProject").innerHTML = `<option value="">${esc(e.message)}</option>`; projectsLoaded = false; }
+}
+
+async function refresh() {
+  try { S = await api("/api/status"); render(); }
+  catch (e) { $("sub").textContent = "Can't reach the uploader. Is it running?"; }
+}
+
+// ---- events
+$("enabled").onchange = (e) => act(e.target, () => api("/api/settings", {enabled: e.target.checked}));
+$("to_youtube").onchange = (e) => act(e.target, () => api("/api/settings", {to_youtube: e.target.checked}));
+$("to_frameio").onchange = (e) => act(e.target, () => api("/api/settings", {to_frameio: e.target.checked}));
+$("scanBtn").onclick = (e) => act(e.target, async () => { await api("/api/scan", {}); banner("Checking the folder now.", true); });
+
+$("ytConnect").onclick = (e) => act(e.target, async () => {
+  const {url} = await api("/api/youtube/connect", {client_id: $("ytId").value, client_secret: $("ytSecret").value});
+  window.open(url, "_blank"); ytPasting = true;
+});
+$("ytCancel").onclick = () => { ytPasting = false; render(); };
+$("ytFinish").onclick = (e) => act(e.target, async () => {
+  await api("/api/youtube/finish", {address: $("ytAddress").value});
+  ytPasting = false; $("ytAddress").value = ""; $("ytSecret").value = ""; banner("YouTube connected.", true);
+});
+
+// computers
+$("addComp").onclick = () => $("addHelp").classList.toggle("hidden");
+$("copyCmd").onclick = async () => {
+  try { await navigator.clipboard.writeText($("cmd").textContent); banner("Copied.", true); }
+  catch { getSelection().selectAllChildren($("cmd")); banner("Press Cmd+C to copy.", true); }
+};
+$("computers").onclick = (e) => {
+  const id = e.target.dataset.remove;
+  if (id && confirm("Remove this computer? Its helper stops the next time it checks in."))
+    act(e.target, () => api("/api/computers/remove", {id}));
+};
+
+// drag and drop
+const drop = $("drop");
+drop.onclick = () => $("pick").click();
+$("pick").onchange = (e) => sendFiles([...e.target.files]);
+drop.ondragover = (e) => { e.preventDefault(); drop.classList.add("over"); };
+drop.ondragleave = () => drop.classList.remove("over");
+drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove("over"); sendFiles([...e.dataTransfer.files]); };
+async function sendFiles(files) {
+  for (const f of files) {
+    await new Promise((done) => {
+      const x = new XMLHttpRequest();
+      x.open("POST", "/api/incoming?name=" + encodeURIComponent(f.name) + "&from=" + encodeURIComponent("Web page"));
+      x.setRequestHeader("X-Media-Uploader", "1");
+      x.upload.onprogress = (ev) => { $("sending").textContent = `Sending ${f.name}: ${Math.round(ev.loaded * 100 / ev.total)}%`; };
+      x.onload = () => {
+        let msg = ""; try { msg = JSON.parse(x.responseText).error || ""; } catch {}
+        if (x.status === 200) banner(`${f.name} added. It will upload shortly.`, true);
+        else banner(`${f.name}: ${msg || "could not be sent"}`, false);
+        done();
+      };
+      x.onerror = () => { banner(`${f.name}: connection lost`, false); done(); };
+      x.send(f);
+    });
+  }
+  $("sending").textContent = ""; $("pick").value = ""; refresh();
+}
+$("ytDisconnect").onclick = (e) => { if (confirm("Disconnect YouTube?")) act(e.target, () => api("/api/youtube/disconnect", {})); };
+
+$("fioConnect").onclick = (e) => act(e.target, async () => {
+  const {url} = await api("/api/frameio/connect", {client_id: $("fioId").value, client_secret: $("fioSecret").value});
+  window.open(url, "_blank", "noopener"); fioPasting = true;
+});
+$("fioCancel").onclick = () => { fioPasting = false; render(); };
+$("fioFinish").onclick = (e) => act(e.target, async () => {
+  const {projects} = await api("/api/frameio/finish", {address: $("fioAddress").value});
+  fioPasting = false; projectsLoaded = false; $("fioAddress").value = ""; $("fioSecret").value = "";
+  banner(projects.length === 1 ? "Frame.io connected." : "Frame.io connected. Now pick a project.", true);
+});
+$("fioProject").onchange = (e) => { if (e.target.value) act(e.target, async () => {
+  await api("/api/frameio/project", {project_id: e.target.value}); banner("Frame.io project saved.", true); }); };
+$("fioDisconnect").onclick = (e) => { if (confirm("Disconnect Frame.io?")) act(e.target, async () => {
+  await api("/api/frameio/disconnect", {}); projectsLoaded = false; }); };
+
+// result of the Google sign-in redirect
+const q = new URLSearchParams(location.search);
+if (q.get("ok") === "youtube") banner("YouTube connected.", true);
+if (q.get("err")) banner(q.get("err"), false);
+if (q.toString()) history.replaceState(null, "", "/");
+
+refresh(); setInterval(refresh, 2000);
+</script>
+</body>
+</html>

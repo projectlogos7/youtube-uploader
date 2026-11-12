@@ -1,142 +1,80 @@
-# studio-uploader
+# Media Uploader
 
-> **Just want a folder that uploads everything in it?** Use the one-file version in
-> [simple/](simple/README.md): drop a video in, it goes up as Private.
+Watches a folder. When it's switched on, every finished media file that lands there is uploaded
+to **YouTube** (always Private), **Frame.io** (with a share link), or both. Then the file is moved
+into `Uploaded/` with a `.links.txt` next to it. A web page lets you connect accounts, switch
+things on and off, and see what's happening.
 
-A small local tool for the studio Mac that uploads reviewer-approved renders to the pinned
-studio YouTube channel as **Private** videos only. Built from the PRD *Studio YouTube Uploader
-(gated, private-only)*.
+Other computers on your Wi‑Fi can use it too: open the page and drag files in, or add a computer
+so a folder on it is watched as well.
 
-**Status: code complete through M7 (pilot).** Live uploads stay disabled until the reviewer
-activates them (Level 3). `run` is a dry run unless `--live` is given *and* the reviewer has made
-a bounded activation *and* approved and released that specific video. The pilot itself is a
-reviewer action: see [docs/PILOT.md](docs/PILOT.md).
+## Start
 
-## What it will and will not do
+You need **Docker Desktop**.
 
-- Uploads only files that a reviewer approved via a manifest bound to the file's SHA-256.
-- Every insert is `privacyStatus=private`, `notifySubscribers=false`, never `publishAt`.
-  Privacy is not a manifest field. A code-level guard rejects any other request.
-- The API client can only call `channels.list`, `videos.list`, `playlistItems.list`,
-  `videos.insert` (resumable) and PUTs to that upload session. There is no code path to
-  `videos.update`, so it cannot change privacy or publish.
-- Does not do thumbnails, playlists, captions or scheduling, and never publishes.
-
-## Quick start (studio Mac)
-
-1. **Install**
-   ```bash
-   brew install python@3.12 ffmpeg
-   git clone https://github.com/projectlogos7/youtube-uploader.git ~/youtube-uploader
-   cd ~/youtube-uploader && python3.12 -m venv .venv && source .venv/bin/activate
-   pip install -e ".[dev]" && pytest -q
-   ```
-2. **Google Cloud** (owner's account): enable YouTube Data API v3, set up the OAuth consent
-   screen with scopes `youtube.upload` + `youtube.readonly`, create a **Desktop app** OAuth client.
-3. **Config**: `cp config/config.example.toml ~/.config/studio-uploader/config.toml`, then set
-   `staging_dir` and `oauth.client_id`.
-4. **Sign in** (owner): `studio-uploader authorize` → paste client secret → allow in browser.
-5. **Pin channel** (owner): `studio-uploader pin` → type the channel ID to confirm.
-6. **Check**: `studio-uploader doctor`, then `studio-uploader run` (dry run, 0 uploads).
-7. **Pilot**: reviewer follows [docs/PILOT.md](docs/PILOT.md).
-
-Then per video: `prepare` → reviewer fills the draft → `approve` → `release` → `activate`
-→ `run --live` → publish by hand in YouTube Studio if wanted.
-
-Full details: [docs/RUNBOOK.md](docs/RUNBOOK.md).
-
-## Commands
-
-| Command | Who | What |
-| --- | --- | --- |
-| `scan [--notify]` | implementer | Readiness of files in the staging folder (never authorizes) |
-| `prepare <file>` | implementer | Draft manifest with the file hash and pinned channel |
-| `validate <manifest> [--draft]` | anyone | Check a manifest against the schema and YouTube limits |
-| `approve <draft> --reviewer N` | reviewer | **Gate 1**: freeze file and manifest read-only, write approval record |
-| `release <approval_id> --reviewer N` | reviewer | **Gate 2**: approve this video for live upload |
-| `activate --reviewer N [--pilot ID] [--max-uploads K] [--expires-in-days D]` / `deactivate` | reviewer | **Level 3** live mode, always bounded |
-| `run [--offline]` | anyone | Dry run: every check, zero upload requests |
-| `run --live [--if-active]` | reviewer / scheduler | Upload released jobs as Private, verify, report |
-| `followup` | anyone | Re-check processing/rejection status of uploaded videos (read-only) |
-| `doctor [--json]` | anyone | Preflight: user, tools, permissions, credential present, token age, pin, quota |
-| `review-pack [--test-log F]` | implementer | Evidence folder + pre-ticked "Done means" checklist |
-| `resolve <id> --video-id X \| --not-uploaded` | reviewer | Settle an uncertain outcome |
-| `kill [--reason]` / `unkill` | anyone / reviewer | Kill switch |
-| `status` | anyone | Kill switch, activation, pin, in-flight uploads, jobs |
-| `authorize` | owner | OAuth consent (PKCE, loopback) → Keychain |
-| `pin` | owner | Confirm and pin the channel |
-| `revoke [--delete-keychain-item]` | owner/reviewer | Revoke the grant |
-
-Setup, approvals, stops, revocation: **[docs/RUNBOOK.md](docs/RUNBOOK.md)**.
-Pilot (M7): **[docs/PILOT.md](docs/PILOT.md)**.
-Approval sheet: [templates/approval_record.md](templates/approval_record.md).
-Manifest schema: [schemas/manifest.schema.json](schemas/manifest.schema.json).
-
-## Layout
-
-```
-src/studio_uploader/
-  cli.py          commands
-  uploader.py     run orchestration: checks, reconcile, upload, verify, report
-  youtube.py      API client: allowlist, privacy guard, kill switch, retries, hard stops
-  auth.py         PKCE loopback consent, refresh, revoke
-  keychain.py     macOS Keychain storage (secrets via stdin, never argv)
-  approval.py     draft, approve/freeze, release, activation
-  manifest.py     manifest validation (FR-5)
-  staging.py      readiness checks (FR-4)
-  pinning.py      channel pin (FR-3)
-  doctor.py       preflight checks
-  reviewpack.py   evidence pack for sign-off
-  notify.py       macOS notifications to the reviewer
-  ledger.py state.py lock.py killswitch.py audit.py redact.py fsutil.py
-tests/            all against a mocked YouTube API (tests/fake_youtube.py)
-scripts/          dry_run_evidence.sh, install_launchd.sh
-templates/launchd optional LaunchAgents (scheduled run, staging watcher)
+```bash
+git clone https://github.com/projectlogos7/youtube-uploader.git
+cd youtube-uploader
+cp .env.example .env        # then set WATCH_FOLDER to your folder
+./start.sh                  # this computer only
+./start.sh --wifi           # or: also other computers on your Wi-Fi
 ```
 
-## PRD traceability
+Open **http://localhost:8765**. It keeps running in the background and starts again with Docker.
+Stop it with `./start.sh stop`; see what it's doing with `./start.sh logs`.
 
-| PRD item | Code | Tests |
-| --- | --- | --- |
-| FR-1 Owner authorization | `auth.py` | `test_client_auth.py` (PKCE, scopes, loopback, state, invalid_grant) |
-| FR-2 Credential storage | `keychain.py` (login Keychain, secrets via stdin) | `test_logs_reports_ledger_contain_no_secrets`, `test_repo_contains_no_secrets` |
-| FR-3 Channel pinning | `pinning.py`, `cli.py pin` | `test_channel_mismatch_hard_stop[*]`, `test_no_pin_is_hard_stop` |
-| FR-4 Staging queue | `staging.py` | `test_staging.py` (growing, open, temp names, truncated, marker, real ffprobe/lsof) |
-| FR-5 Approval manifest | `manifest.py`, `approval.py` | `test_manifest.py`, changed manifest/file tests |
-| FR-6 Upload, Private only | `youtube.py` | privacy guard tests, `test_dry_run_sends_zero_upload_requests`, endpoint allowlist |
-| FR-7 Post-upload verification | `uploader._verify` | `test_live_upload_happy_path` |
-| RS-1 Resumable, protected state | `state.py`, `uploader._upload` | `test_crash_and_resume_from_saved_offset`, `test_state_file_is_owner_only` |
-| RS-2 Per-job lock | `lock.py` | `test_second_run_on_same_job_exits`, `test_concurrent_run_exits` |
-| RS-3 Ledger | `ledger.py` | happy path ledger assertions |
-| RS-4 Duplicate guard | `Ledger.video_for_hash` | `test_duplicate_hash_is_skipped`, `test_second_run_does_not_reupload` |
-| RS-5 Reconcile first | `uploader._reconcile_all` | three `test_uncertain_outcome_*` tests |
-| RS-6 Bounded retries | `YouTubeClient.request` | `test_5xx_*`, `test_transient_network_error_mid_upload_recovers` |
-| RS-7 Hard stops | `errors.py` | auth, quota, 4xx, channel tests |
-| RS-8 Kill switch | `killswitch.py`, checked in `YouTubeClient.request` | `test_kill_switch_*` |
-| RS-9 Redacted audit log | `redact.py`, `audit.py` | `test_logs_reports_ledger_contain_no_secrets`, redaction unit tests |
-| RS-10 Runbook | `docs/RUNBOOK.md` | — |
-| Approval level 3: bounded activation, pilot scope | `approval.activate`, `check_activation_scope` | `test_final_phase.py` (pilot scope, count, expiry, resume not double-counted) |
-| Quota (100 uploads/day) | `daily_upload_cap`, `Ledger.starts_today` | `test_daily_upload_cap`, `test_starts_today_boundary` |
-| 7-day Testing-mode tokens | `auth.check_token_age` | `test_token_age_rules`, `test_expired_testing_token_stops_before_any_call` |
-| FR-7 processing outcome over time | `Uploader._followups`, `followup` | `test_followup_*` |
-| Alert the reviewer | `notify.py`, `alerts/` | `test_notifications_on_stop_and_upload` |
-| M6 review pack | `doctor.py`, `reviewpack.py` | `test_doctor_reviewpack.py` |
-| M7 pilot | `docs/PILOT.md` | reviewer-run; not automated |
-| Secret scanning | `.github/workflows/ci.yml` (gitleaks), `.pre-commit-config.yaml` | `test_repo_contains_no_secrets` |
+## Connect YouTube (once)
 
-## Not built (PRD non-goals or later phases needing approval)
+1. At https://console.cloud.google.com, signed in as the channel's Google account: create a project,
+   enable **YouTube Data API v3**, set up the **OAuth consent screen** (External) and add the
+   channel's Gmail as a **test user**.
+2. **Credentials → Create credentials → OAuth client ID → Desktop app.**
+3. In the page, paste the client ID and secret under **YouTube** and click **Connect YouTube**.
+   Sign in and allow. On the computer running the app it finishes by itself. On another computer
+   you end on a `localhost` error page: copy that address and paste it into the box.
 
-Thumbnails, playlists, captions, end screens, comments, scheduling, privacy changes and
-publishing. Any of these would need a new PRD approval and new scopes.
+While the Google app is in "Testing", Google ends the sign-in after 7 days. Click **Reconnect**
+when the page says so, or **Publish app** on the consent screen to stop that.
 
-## Trust model notes
+## Connect Frame.io (once)
 
-- Approval and release records are local files. The code checks they exist and match the
-  manifest digest and file hash, but it cannot prove *who* wrote them. Keep `frozen/`,
-  `releases/` and `activation.json` writable only by your Mac user, and have the
-  reviewer run those commands themselves.
-- The credential is in your login Keychain, not a separate macOS user (simplified from the
-  PRD's FR-2). Programs running under your Mac account could ask the Keychain for it, so don't
-  give AI agents or untrusted scripts shell access on this account.
-- The reconcile channel search matches by exact title, upload time and file size. If that is
-  ambiguous it stops for the reviewer rather than guessing.
+1. At https://developer.adobe.com/console, signed in with the Adobe ID you use for Frame.io:
+   **Create new project → Add API → Frame.io API → OAuth Web App**.
+2. Set **Default redirect URI** and **Redirect URI pattern** to `https://localhost`.
+3. In the page, paste the client ID and secret under **Frame.io**, click **Connect Frame.io**, sign in.
+   You end on an error page at `localhost`: that's expected. Copy the whole address, paste it, click
+   **Finish**, then pick the project uploads should go into.
+
+## Use it
+
+- Switch **on** the watcher (top right) and choose **YouTube**, **Frame.io** or both.
+- Put finished files in the folder. It waits until a file stops changing, then uploads it.
+- Links appear under **History** and in `Uploaded/<file>.links.txt`.
+- YouTube takes video files only; Frame.io takes video, audio, images and PDFs.
+- The same file is never uploaded twice to the same place.
+
+## Other computers on your Wi‑Fi
+
+Start with `./start.sh --wifi`. It prints the address other computers should open
+(e.g. `http://studio-mac.local:8765`).
+
+- **Drop files:** open that address on any computer and drag files onto the page.
+- **Watch a folder on another computer:** on the page click **Add a computer**, copy the two lines,
+  and paste them into Terminal on that computer. That folder is now watched too; sent files
+  are moved to a `Sent` folder there. Click **Remove** in the page to stop it.
+  (The `--install` part keeps it running on a Mac; on other systems leave the window open.)
+
+Anyone on your network can open the page with `--wifi`, so only use it on a network you trust.
+Run `./start.sh` again without `--wifi` to make it private to this computer.
+
+## Where things are kept
+
+Settings, sign-ins and history are in the Docker volume `uploader-data` (sign-ins in a file only
+the app can read). Nothing is sent anywhere except Google/YouTube and Adobe/Frame.io.
+
+## Tests
+
+```bash
+pip install pytest && pytest
+```
+All tests use fake YouTube and Frame.io servers.

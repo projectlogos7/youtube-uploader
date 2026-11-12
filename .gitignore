@@ -1,16 +1,6 @@
 __pycache__/
 *.pyc
-*.egg-info/
 .pytest_cache/
-.venv/
-build/
-dist/
-
-# Runtime data: never commit. Lives under the uploader's base_dir, not the repo.
-/var/
-config/config.toml
-*.state.json
-client_secret*.json
-token*.json
-*.keychain
-*.keychain-db
+.env
+watch/
+data/
