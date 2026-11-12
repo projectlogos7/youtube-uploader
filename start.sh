@@ -7,10 +7,7 @@
 set -e
 cd "$(dirname "$0")"
 
-if [ ! -f .env ]; then
-  mkdir -p watch
-  echo "No .env file: watching ./watch. To watch another folder: cp .env.example .env and edit it."
-fi
+export UID_GID="$(id -u):$(id -g)"
 
 case "${1:-}" in
   stop) docker compose down; exit ;;
@@ -33,7 +30,7 @@ esac
 
 docker compose up -d --build
 echo
-echo "Media Uploader is running:  http://localhost:8765"
+echo "Media Uploader is running:  http://localhost:8765   (choose the watch folder there)"
 if [ "$LAN_ACCESS" = 1 ]; then
   extra=""; [ -n "$ip" ] && [ "http://$ip:8765" != "$SERVER_URL" ] && extra="   (or http://$ip:8765)"
   echo "Other computers on your Wi-Fi:  $SERVER_URL$extra"

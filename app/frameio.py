@@ -12,6 +12,10 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 
 from . import net
 
+
+def _sleep(seconds):  # replaced in tests
+    time.sleep(seconds)
+
 IMS = "https://ims-na1.adobelogin.com/ims"
 API = "https://api.frame.io/v4"
 SCOPES = "openid,AdobeID,offline_access,email,profile,additional_info.roles"
@@ -110,7 +114,7 @@ def api(method, path, token, payload=None):
         except OSError:
             status, raw = 0, b""
         if status in (0, 429) or status >= 500:
-            time.sleep(2 ** attempt * 2)
+            _sleep(2 ** attempt * 2)
             continue
         if status == 401:
             raise NeedsReconnect("Frame.io refused the sign-in. Click Reconnect (use the Adobe ID linked to Frame.io).")
@@ -167,7 +171,7 @@ def upload(store, path, progress=lambda pct: None):
                     break
                 if attempt == 5:
                     raise RuntimeError(f"Frame.io upload part {n} kept failing ({status})")
-                time.sleep(min(2 ** attempt * 2, 60))
+                _sleep(min(2 ** attempt * 2, 60))
             offset += len(chunk)
             progress(offset * 100 // max(size, 1))
 

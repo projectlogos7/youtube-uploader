@@ -14,6 +14,7 @@ from pathlib import Path
 
 DEFAULTS = {
     "enabled": False,
+    "folder": "",
     "to_youtube": True,
     "to_frameio": False,
     "youtube": {"client_id": "", "channel": ""},
@@ -99,6 +100,13 @@ class Store:
             all_ = self.computers()
             all_[cid] = {**all_.get(cid, {"sent": 0}), **info, "last_seen": time.time()}
             self._write(self.computers_path, all_, 0o644)
+
+    def set_computer_folder(self, cid, folder):
+        with self.lock:
+            all_ = self.computers()
+            if cid in all_:
+                all_[cid]["folder"] = folder
+                self._write(self.computers_path, all_, 0o644)
 
     def computer_sent(self, cid):
         with self.lock:

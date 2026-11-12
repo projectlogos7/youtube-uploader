@@ -19,27 +19,30 @@
   main { max-width: 920px; margin: 0 auto; padding: 24px 16px 48px; }
   header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
   h1 { font-size: 22px; margin: 0; }
-  h2 { font-size: 15px; margin: 0 0 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
-  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  h2 { font-size: 13px; margin: 0 0 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
   @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px; margin-bottom: 16px; }
   .grid .card { margin-bottom: 0; }
-  .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; }
   .row + .row { border-top: 1px solid var(--line); }
+  .row > div:first-child { min-width: 0; }
+  @media (max-width: 600px) { .row.folder { flex-direction: column; align-items: flex-start; } }
   .muted { color: var(--muted); font-size: 13px; }
-  .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; }
-  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
-  .on .dot { background: var(--ok); } .warn .dot { background: var(--warn); } .bad .dot { background: var(--bad); }
+  .path { font-size: 13px; word-break: break-all; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+  .on .dot { background: var(--ok); } .warn .dot { background: var(--warn); }
   label.field { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
   input[type=text], input[type=password], select, textarea {
     width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px;
     background: var(--field); color: var(--text); font: inherit; }
   button { font: inherit; font-weight: 600; border: 1px solid var(--line); background: var(--field);
-           color: var(--text); padding: 7px 14px; border-radius: 8px; cursor: pointer; }
+           color: var(--text); padding: 7px 14px; border-radius: 8px; cursor: pointer; white-space: nowrap; }
   button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
   button:disabled { opacity: .5; cursor: default; }
   .actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
-  /* switch */
+  .btns { display: flex; gap: 8px; flex: none; }
   .switch { position: relative; width: 52px; height: 30px; flex: none; }
   .switch input { opacity: 0; width: 0; height: 0; }
   .slider { position: absolute; inset: 0; background: var(--line); border-radius: 30px; transition: .2s; cursor: pointer; }
@@ -62,14 +65,24 @@
   .banner.bad { background: color-mix(in srgb, var(--bad) 15%, transparent); }
   .hidden { display: none !important; }
   code { font-size: 13px; background: var(--field); padding: 1px 5px; border-radius: 5px; border: 1px solid var(--line); }
-  ol.steps { margin: 6px 0 0; padding-left: 20px; font-size: 13px; color: var(--muted); }
-  .err { color: var(--bad); }
-  .drop { border: 2px dashed var(--line); border-radius: 12px; padding: 22px; text-align: center; cursor: pointer; }
-  .drop.over { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
   pre.cmd { white-space: pre-wrap; word-break: break-all; background: var(--field); border: 1px solid var(--line);
             border-radius: 8px; padding: 10px; font-size: 12.5px; margin: 6px 0 0; }
-  .comp { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
-  .comp:first-of-type { border-top: 0; }
+  ol.steps { margin: 6px 0 0; padding-left: 20px; font-size: 13px; color: var(--muted); }
+  .err { color: var(--bad); }
+  /* folder picker */
+  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: center;
+             justify-content: center; padding: 16px; z-index: 10; }
+  .modal { background: var(--card); border-radius: 14px; width: min(560px, 100%); max-height: 85vh;
+           display: flex; flex-direction: column; border: 1px solid var(--line); }
+  .modal header { padding: 16px 18px 8px; margin: 0; display: block; }
+  .modal h3 { margin: 0 0 6px; font-size: 17px; }
+  .list { overflow: auto; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); min-height: 200px; }
+  .list button { display: block; width: 100%; text-align: left; border: 0; border-radius: 0; background: none;
+                 padding: 10px 18px; font-weight: 500; border-bottom: 1px solid var(--line); }
+  .list button:hover { background: var(--field); }
+  .modal footer { padding: 12px 18px; display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .chips button { padding: 3px 10px; font-size: 12px; font-weight: 500; }
 </style>
 </head>
 <body>
@@ -90,65 +103,50 @@
   <div id="banner" class="banner hidden"></div>
 
   <section class="card">
-    <h2>Watcher</h2>
-    <div class="row">
-      <div><div>Folder</div><div class="muted" id="folder">–</div></div>
-      <button id="scanBtn">Check now</button>
+    <h2>Watch folders</h2>
+    <div id="folders"></div>
+    <div id="lanOff" class="muted hidden" style="margin-top:10px">
+      To add watch folders on other computers, start the app with <code>./start.sh --wifi</code>.
     </div>
+    <div class="actions" id="addRow"><button id="addComp">+ Add another computer</button></div>
+    <div id="addHelp" class="hidden">
+      <p class="muted" style="margin:12px 0 0">On the other computer (same Wi‑Fi), open <b>Terminal</b>, paste this line and
+        press Return. It appears here within a few seconds; then click <b>Choose folder</b> next to it.</p>
+      <pre class="cmd" id="cmd"></pre>
+      <div class="actions"><button id="copyCmd">Copy</button></div>
+      <p class="muted">That computer only <b>sends</b> finished files here; all uploading happens on this computer.
+        Sent files are moved into a <b>Sent</b> folder over there.</p>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Upload to</h2>
     <div class="row">
-      <div><div>Upload to YouTube</div><div class="muted">Videos only, always Private, subscribers not notified</div></div>
+      <div><div>YouTube</div><div class="muted" id="ytDestNote">Videos only, always Private</div></div>
       <label class="switch small"><input type="checkbox" id="to_youtube"><span class="slider"></span></label>
     </div>
     <div class="row">
-      <div><div>Upload to Frame.io</div><div class="muted" id="fioDestNote">Any media, with a share link</div></div>
+      <div><div>Frame.io</div><div class="muted" id="fioDestNote">Any media, with a share link</div></div>
       <label class="switch small"><input type="checkbox" id="to_frameio"><span class="slider"></span></label>
     </div>
-    <div id="notice" class="muted err" style="margin-top:8px"></div>
+    <div class="row">
+      <div class="muted err" id="notice"></div>
+      <button id="scanBtn">Check now</button>
+    </div>
   </section>
 
-  <section class="card" id="currentCard">
+  <section class="card">
     <h2>Now</h2>
     <div id="current" class="muted">Nothing uploading.</div>
     <div class="bar hidden" id="barWrap"><div id="bar"></div></div>
-    <div id="files" style="margin-top:10px"></div>
+    <div id="files" style="margin-top:6px"></div>
   </section>
 
-  <section class="card">
-    <h2>Send files from this computer</h2>
-    <div class="drop" id="drop">
-      <b>Drop media files here</b> or click to choose.
-      <div class="muted">They go into the watch folder and upload like any other file.</div>
-      <input type="file" id="pick" multiple class="hidden">
-    </div>
-    <div id="sending" class="muted" style="margin-top:8px"></div>
-  </section>
-
-  <section class="card">
-    <h2>Computers</h2>
-    <div id="lanOff" class="muted hidden">
-      Only this computer can open this page right now. To let other computers on your Wi‑Fi use it,
-      start it with <code>./start.sh --wifi</code>.
-    </div>
-    <div id="computers" class="muted">No other computers added yet.</div>
-    <div class="actions"><button id="addComp">Add a computer</button></div>
-    <div id="addHelp" class="hidden">
-      <p class="muted" style="margin:12px 0 0">On the other computer, open <b>Terminal</b> and paste these two lines.
-        Change the folder if you like. It will watch that folder and send finished files here.</p>
-      <pre class="cmd" id="cmd"></pre>
-      <div class="actions"><button id="copyCmd">Copy</button></div>
-      <p class="muted">The other computer must be on the same Wi‑Fi. Files it sends are moved to a <b>Sent</b>
-        folder there. To stop it later, click <b>Remove</b> here.</p>
-    </div>
-  </section>
-
-  <div class="grid" style="margin-bottom:16px">
-    <!-- YouTube -->
+  <div class="grid">
     <section class="card">
-      <h2>YouTube</h2>
+      <h2>YouTube account</h2>
       <div class="pill" id="ytPill"><span class="dot"></span><span id="ytText">Not connected</span></div>
-      <div id="ytConnected" class="hidden">
-        <div class="actions"><button id="ytDisconnect">Disconnect</button></div>
-      </div>
+      <div id="ytConnected" class="hidden"><div class="actions"><button id="ytDisconnect">Disconnect</button></div></div>
       <div id="ytForm">
         <ol class="steps">
           <li>In Google Cloud: enable <b>YouTube Data API v3</b>, set up the OAuth consent screen, add your channel's Gmail as a test user.</li>
@@ -159,17 +157,15 @@
         <div class="actions"><button class="primary" id="ytConnect">Connect YouTube</button></div>
       </div>
       <div id="ytPaste" class="hidden">
-        <p class="muted">Sign in in the tab that opened. On the computer running Media Uploader this finishes by itself.
-          On any other computer you'll end on an error page at <b>localhost</b>: copy the <b>whole address</b>
-          from that tab and paste it here.</p>
+        <p class="muted">Sign in in the tab that opened. On the main computer this finishes by itself. On another computer
+          you'll end on an error page at <b>localhost</b>: copy the <b>whole address</b> from that tab and paste it here.</p>
         <textarea id="ytAddress" rows="3" placeholder="http://localhost:8765/?state=…&code=…"></textarea>
         <div class="actions"><button class="primary" id="ytFinish">Finish</button><button id="ytCancel">Cancel</button></div>
       </div>
     </section>
 
-    <!-- Frame.io -->
     <section class="card">
-      <h2>Frame.io</h2>
+      <h2>Frame.io account</h2>
       <div class="pill" id="fioPill"><span class="dot"></span><span id="fioText">Not connected</span></div>
       <div id="fioConnected" class="hidden">
         <label class="field">Upload into project</label>
@@ -187,7 +183,7 @@
       </div>
       <div id="fioPaste" class="hidden">
         <p class="muted">Sign in in the tab that opened. You'll end on an error page at <b>localhost</b>.
-          That's expected: copy the <b>whole address</b> from that tab's address bar and paste it here.</p>
+          That's expected: copy the <b>whole address</b> from that tab and paste it here.</p>
         <textarea id="fioAddress" rows="3" placeholder="https://localhost/?code=…"></textarea>
         <div class="actions"><button class="primary" id="fioFinish">Finish</button><button id="fioCancel">Cancel</button></div>
       </div>
@@ -200,9 +196,25 @@
   </section>
 </main>
 
+<div class="overlay hidden" id="picker">
+  <div class="modal">
+    <header>
+      <h3 id="pkTitle">Choose a folder</h3>
+      <div class="path" id="pkPath">…</div>
+      <div class="chips" id="pkChips"></div>
+    </header>
+    <div class="list" id="pkList"></div>
+    <footer>
+      <button id="pkUp">↑ Up</button>
+      <div class="btns"><button id="pkCancel">Cancel</button><button class="primary" id="pkUse">Watch this folder</button></div>
+    </footer>
+  </div>
+</div>
+
 <script>
 const $ = (id) => document.getElementById(id);
 let S = null, projectsLoaded = false, fioPasting = false, ytPasting = false;
+const pk = {computer: null, path: "", parent: null};
 
 async function api(path, body) {
   const r = await fetch(path, body === undefined ? {} : {
@@ -222,36 +234,64 @@ async function act(btn, fn) {
   try { await fn(); await refresh(); } catch (e) { banner(e.message, false); } finally { btn.disabled = false; }
 }
 
+function folderRow(id, name, online, folder, detail, removable) {
+  return `<div class="row folder"><div>
+      <span class="pill ${online ? "on" : ""}"><span class="dot"></span>${esc(name)}</span>
+      <div class="path ${folder ? "" : "muted"}">${folder ? esc(folder) : "No folder chosen"}</div>
+      <div class="muted">${detail}</div></div>
+    <div class="btns"><button data-pick="${esc(id)}" data-name="${esc(name)}" ${online ? "" : "disabled"}>Choose folder</button>
+      ${removable ? `<button data-remove="${esc(id)}">Remove</button>` : ""}</div></div>`;
+}
+
 function render() {
   const s = S;
   $("enabled").checked = s.enabled;
   pill($("watchPill"), s.enabled ? "on" : "", s.enabled ? "Watching" : "Off", $("watchText"));
-  $("sub").textContent = s.enabled ? `Last checked ${s.last_scan || "–"}` : "Watcher is off. Turn it on to start uploading.";
-  $("folder").textContent = s.watch_dir + (s.watch_dir_ok ? "" : "  (not found)");
+  $("sub").textContent = s.enabled ? `Last checked ${s.last_scan || "–"}` : "Watcher is off. Turn it on to start.";
+
+  // watch folders
+  const m = s.main;
+  let html = folderRow("main", "This computer (main)", true, m.folder,
+    m.folder && !m.folder_ok ? `<span class="err">Folder not found</span>` : "Uploads happen here", false);
+  for (const c of s.computers) {
+    const bits = [c.online ? "Online" : "Offline since " + c.last_seen, `${c.sent} sent`];
+    if (c.waiting.length) bits.push(`${c.waiting.length} in folder`);
+    html += folderRow(c.id, c.name, c.online, c.folder,
+      esc(bits.join(" · ")) + (c.problem ? ` · <span class="err">${esc(c.problem)}</span>` : ""), true);
+  }
+  $("folders").innerHTML = html;
+  $("lanOff").classList.toggle("hidden", s.lan);
+  $("addRow").classList.toggle("hidden", !s.lan);
+  if (!s.lan) $("addHelp").classList.add("hidden");
+  const server = s.server_url || location.origin;
+  $("cmd").textContent = `curl -fsSL ${server}/agent.py -o ~/media-agent.py && python3 ~/media-agent.py --server ${server} --install`;
+
+  // destinations
   $("to_youtube").checked = s.to_youtube;
   $("to_frameio").checked = s.to_frameio;
+  $("ytDestNote").textContent = s.youtube.connected ? `Videos only, always Private · ${s.youtube.channel || "connected"}`
+                                                    : "Connect your YouTube account below";
+  $("fioDestNote").textContent = s.frameio.ready ? `Any media into "${s.frameio.project}", with a share link`
+                                                 : "Connect Frame.io below";
   $("notice").textContent = s.enabled ? (s.notice || "") : "";
 
-  // current upload
+  // now
   if (s.current) {
-    $("current").innerHTML = `Uploading <b>${esc(s.current.file)}</b> to ${esc(s.current.dest)} — ${s.current.pct}%`;
+    $("current").innerHTML = `Uploading <b>${esc(s.current.file)}</b> from ${esc(s.current.from)} to ${esc(s.current.dest)}: ${s.current.pct}%`;
     $("barWrap").classList.remove("hidden"); $("bar").style.width = s.current.pct + "%";
   } else { $("current").textContent = "Nothing uploading."; $("barWrap").classList.add("hidden"); }
-  const files = Object.entries(s.files || {});
-  $("files").innerHTML = files.length ? `<table><tr><th>In folder</th><th>Status</th></tr>${
-    files.map(([f, st]) => `<tr><td>${esc(f)}</td><td class="muted">${esc(st)}</td></tr>`).join("")}</table>` : "";
+  $("files").innerHTML = s.files.length ? `<table><tr><th>Waiting</th><th>From</th><th>Status</th></tr>${
+    s.files.map(f => `<tr><td>${esc(f.file)}</td><td class="muted">${esc(f.from)}</td><td class="muted">${esc(f.status)}</td></tr>`).join("")}</table>` : "";
 
-  // YouTube
+  // accounts
   const yt = s.youtube;
   pill($("ytPill"), yt.connected ? "on" : "", yt.connected ? `Connected${yt.channel ? " · " + yt.channel : ""}` : "Not connected", $("ytText"));
-  $("ytConnected").classList.toggle("hidden", !yt.connected);
   if (yt.connected) ytPasting = false;
+  $("ytConnected").classList.toggle("hidden", !yt.connected);
   $("ytForm").classList.toggle("hidden", yt.connected || ytPasting);
   $("ytPaste").classList.toggle("hidden", !ytPasting);
   if (!$("ytId").value && yt.client_id) $("ytId").value = yt.client_id;
-  $("ytConnect").textContent = yt.client_id && !yt.connected ? "Reconnect YouTube" : "Connect YouTube";
 
-  // Frame.io
   const f = s.frameio;
   pill($("fioPill"), f.ready ? "on" : (f.connected ? "warn" : ""),
        f.ready ? `Connected · ${f.project}` : (f.connected ? "Connected · pick a project" : "Not connected"), $("fioText"));
@@ -259,29 +299,13 @@ function render() {
   $("fioForm").classList.toggle("hidden", f.connected || fioPasting);
   $("fioPaste").classList.toggle("hidden", !fioPasting);
   if (!$("fioId").value && f.client_id) $("fioId").value = f.client_id;
-  $("fioDestNote").textContent = f.ready ? `Any media, into "${f.project}", with a share link` : "Any media, with a share link";
   if (f.connected && !projectsLoaded) loadProjects();
 
-  // computers
-  $("lanOff").classList.toggle("hidden", s.lan);
-  $("addComp").classList.toggle("hidden", !s.lan);
-  if (!s.lan) $("addHelp").classList.add("hidden");
-  const server = s.server_url || location.origin;
-  $("cmd").textContent = `curl -fsSL ${server}/agent.py -o ~/media-agent.py\n` +
-    `python3 ~/media-agent.py --server ${server} --folder ~/Movies/Upload --install`;
-  const cs = s.computers || [];
-  $("computers").innerHTML = cs.length ? cs.map(c => `<div class="comp"><div>
-      <span class="pill ${c.online ? "on" : ""}"><span class="dot"></span>${esc(c.name)}</span>
-      <div class="muted">${esc(c.folder)}</div>
-      <div class="muted">${c.online ? "Online" : "Last seen " + esc(c.last_seen)} · ${c.sent} sent${
-        c.waiting.length ? " · " + c.waiting.length + " in its folder" : ""}</div></div>
-      <div><button data-remove="${esc(c.id)}">Remove</button></div></div>`).join("")
-    : (s.lan ? "No other computers added yet." : "");
-
   // history
-  const h = s.history || [];
-  $("history").innerHTML = h.length ? `<table><tr><th>When</th><th>File</th><th>Where</th><th>Link</th></tr>${
-    h.map(r => `<tr><td class="muted">${esc(r.time)}</td><td>${esc(r.file)}${r.source ? `<div class="muted">from ${esc(r.source)}</div>` : ""}</td><td>${esc(r.dest === "youtube" ? "YouTube" : "Frame.io")}</td>
+  const h = s.history;
+  $("history").innerHTML = h.length ? `<table><tr><th>When</th><th>File</th><th>To</th><th>Link</th></tr>${
+    h.map(r => `<tr><td class="muted">${esc(r.time)}</td><td>${esc(r.file)}<div class="muted">from ${esc(r.source || "")}</div></td>
+      <td>${r.dest === "youtube" ? "YouTube" : "Frame.io"}</td>
       <td class="link">${r.status === "ok" ? `<a href="${esc(r.link)}" target="_blank" rel="noopener">${esc(r.link)}</a>`
                                          : `<span class="err">${esc(r.error)}</span>`}</td></tr>`).join("")}</table>` : "No uploads yet.";
 }
@@ -290,24 +314,66 @@ async function loadProjects() {
   projectsLoaded = true;
   try {
     const {projects} = await api("/api/frameio/projects");
-    const sel = $("fioProject");
-    sel.innerHTML = `<option value="">— choose a project —</option>` +
+    $("fioProject").innerHTML = `<option value="">— choose a project —</option>` +
       projects.map(p => `<option value="${esc(p.project_id)}">${esc(p.label)}</option>`).join("");
     const cur = projects.find(p => p.name === S.frameio.project);
-    if (cur) sel.value = cur.project_id;
+    if (cur) $("fioProject").value = cur.project_id;
   } catch (e) { $("fioProject").innerHTML = `<option value="">${esc(e.message)}</option>`; projectsLoaded = false; }
 }
 
 async function refresh() {
   try { S = await api("/api/status"); render(); }
-  catch (e) { $("sub").textContent = "Can't reach the uploader. Is it running?"; }
+  catch (e) { $("sub").textContent = "Can't reach the main computer. Is the app running?"; }
 }
 
-// ---- events
+// ---- folder picker
+async function openPicker(computer, name, start) {
+  pk.computer = computer;
+  $("pkTitle").textContent = `Choose a folder on ${name}`;
+  $("picker").classList.remove("hidden");
+  await browse(start || "");
+}
+async function browse(path) {
+  $("pkList").innerHTML = `<div class="muted" style="padding:14px 18px">Loading…</div>`;
+  try {
+    const r = await api(`/api/browse?computer=${encodeURIComponent(pk.computer)}&path=${encodeURIComponent(path)}`);
+    pk.path = r.path; pk.parent = r.parent;
+    $("pkPath").textContent = r.path;
+    $("pkUp").disabled = !r.parent;
+    $("pkChips").innerHTML = r.shortcuts.map(x => `<button data-go="${esc(x)}">${esc(x.split("/").pop() || x)}</button>`).join("");
+    $("pkList").innerHTML = r.dirs.length ? r.dirs.map(d => `<button data-dir="${esc(d)}">📁 ${esc(d)}</button>`).join("")
+      : `<div class="muted" style="padding:14px 18px">No folders inside. You can watch this one.</div>`;
+  } catch (e) { $("pkList").innerHTML = `<div class="err" style="padding:14px 18px">${esc(e.message)}</div>`; }
+}
+$("pkList").onclick = (e) => { const d = e.target.closest("[data-dir]"); if (d) browse(pk.path.replace(/\/$/, "") + "/" + d.dataset.dir); };
+$("pkChips").onclick = (e) => { const g = e.target.closest("[data-go]"); if (g) browse(g.dataset.go); };
+$("pkUp").onclick = () => pk.parent && browse(pk.parent);
+$("pkCancel").onclick = () => $("picker").classList.add("hidden");
+$("pkUse").onclick = (e) => act(e.target, async () => {
+  await api("/api/folder", {computer: pk.computer, path: pk.path});
+  $("picker").classList.add("hidden"); banner("Watch folder saved.", true);
+});
+
+$("folders").onclick = (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.pick) {
+    const cur = b.dataset.pick === "main" ? S.main.folder : (S.computers.find(c => c.id === b.dataset.pick) || {}).folder;
+    openPicker(b.dataset.pick, b.dataset.name, cur);
+  }
+  if (b.dataset.remove && confirm("Remove this computer? It stops sending files."))
+    act(b, () => api("/api/computers/remove", {id: b.dataset.remove}));
+};
+
+// ---- other events
 $("enabled").onchange = (e) => act(e.target, () => api("/api/settings", {enabled: e.target.checked}));
 $("to_youtube").onchange = (e) => act(e.target, () => api("/api/settings", {to_youtube: e.target.checked}));
 $("to_frameio").onchange = (e) => act(e.target, () => api("/api/settings", {to_frameio: e.target.checked}));
-$("scanBtn").onclick = (e) => act(e.target, async () => { await api("/api/scan", {}); banner("Checking the folder now.", true); });
+$("scanBtn").onclick = (e) => act(e.target, async () => { await api("/api/scan", {}); banner("Checking now.", true); });
+$("addComp").onclick = () => $("addHelp").classList.toggle("hidden");
+$("copyCmd").onclick = async () => {
+  try { await navigator.clipboard.writeText($("cmd").textContent); banner("Copied.", true); }
+  catch { getSelection().selectAllChildren($("cmd")); banner("Press Cmd+C (or Ctrl+C) to copy.", true); }
+};
 
 $("ytConnect").onclick = (e) => act(e.target, async () => {
   const {url} = await api("/api/youtube/connect", {client_id: $("ytId").value, client_secret: $("ytSecret").value});
@@ -318,45 +384,6 @@ $("ytFinish").onclick = (e) => act(e.target, async () => {
   await api("/api/youtube/finish", {address: $("ytAddress").value});
   ytPasting = false; $("ytAddress").value = ""; $("ytSecret").value = ""; banner("YouTube connected.", true);
 });
-
-// computers
-$("addComp").onclick = () => $("addHelp").classList.toggle("hidden");
-$("copyCmd").onclick = async () => {
-  try { await navigator.clipboard.writeText($("cmd").textContent); banner("Copied.", true); }
-  catch { getSelection().selectAllChildren($("cmd")); banner("Press Cmd+C to copy.", true); }
-};
-$("computers").onclick = (e) => {
-  const id = e.target.dataset.remove;
-  if (id && confirm("Remove this computer? Its helper stops the next time it checks in."))
-    act(e.target, () => api("/api/computers/remove", {id}));
-};
-
-// drag and drop
-const drop = $("drop");
-drop.onclick = () => $("pick").click();
-$("pick").onchange = (e) => sendFiles([...e.target.files]);
-drop.ondragover = (e) => { e.preventDefault(); drop.classList.add("over"); };
-drop.ondragleave = () => drop.classList.remove("over");
-drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove("over"); sendFiles([...e.dataTransfer.files]); };
-async function sendFiles(files) {
-  for (const f of files) {
-    await new Promise((done) => {
-      const x = new XMLHttpRequest();
-      x.open("POST", "/api/incoming?name=" + encodeURIComponent(f.name) + "&from=" + encodeURIComponent("Web page"));
-      x.setRequestHeader("X-Media-Uploader", "1");
-      x.upload.onprogress = (ev) => { $("sending").textContent = `Sending ${f.name}: ${Math.round(ev.loaded * 100 / ev.total)}%`; };
-      x.onload = () => {
-        let msg = ""; try { msg = JSON.parse(x.responseText).error || ""; } catch {}
-        if (x.status === 200) banner(`${f.name} added. It will upload shortly.`, true);
-        else banner(`${f.name}: ${msg || "could not be sent"}`, false);
-        done();
-      };
-      x.onerror = () => { banner(`${f.name}: connection lost`, false); done(); };
-      x.send(f);
-    });
-  }
-  $("sending").textContent = ""; $("pick").value = ""; refresh();
-}
 $("ytDisconnect").onclick = (e) => { if (confirm("Disconnect YouTube?")) act(e.target, () => api("/api/youtube/disconnect", {})); };
 
 $("fioConnect").onclick = (e) => act(e.target, async () => {
@@ -374,7 +401,6 @@ $("fioProject").onchange = (e) => { if (e.target.value) act(e.target, async () =
 $("fioDisconnect").onclick = (e) => { if (confirm("Disconnect Frame.io?")) act(e.target, async () => {
   await api("/api/frameio/disconnect", {}); projectsLoaded = false; }); };
 
-// result of the Google sign-in redirect
 const q = new URLSearchParams(location.search);
 if (q.get("ok") === "youtube") banner("YouTube connected.", true);
 if (q.get("err")) banner(q.get("err"), false);

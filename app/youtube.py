@@ -12,6 +12,10 @@ from urllib.parse import urlencode
 
 from . import net
 
+
+def _sleep(seconds):  # replaced in tests
+    time.sleep(seconds)
+
 SCOPES = ("https://www.googleapis.com/auth/youtube.upload "
           "https://www.googleapis.com/auth/youtube.readonly")
 TOKEN_URL = "https://oauth2.googleapis.com/token"
@@ -155,7 +159,7 @@ def upload(store, path, progress=lambda pct: None):
             failures += 1
             if failures > 6:
                 raise RuntimeError(f"YouTube upload kept failing (last status {status})")
-            time.sleep(min(2 ** failures, 60))
+            _sleep(min(2 ** failures, 60))
             if status == 401:
                 token = access_token(store)
             try:  # ask how much arrived, then continue from there

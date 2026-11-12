@@ -1,5 +1,9 @@
-"""Folder watcher. When enabled, uploads each finished media file in the folder to the
-chosen destinations, then moves it into an `Uploaded` subfolder."""
+"""Watcher. When switched on, it looks at:
+  * the folder chosen for this computer, and
+  * the inbox, where files sent by other computers' helpers arrive (one sub-folder per computer).
+Each finished media file is uploaded to the chosen destinations. Files from this computer's
+folder are then moved into `Uploaded/` there; files from the inbox are deleted (the original
+stays on the laptop that sent it)."""
 
 import hashlib
 import shutil
@@ -12,6 +16,12 @@ from . import frameio, youtube
 MEDIA_TYPES = youtube.VIDEO_TYPES | {".wav", ".mp3", ".aac", ".m4a", ".aif", ".aiff", ".flac",
                                      ".jpg", ".jpeg", ".png", ".tif", ".tiff", ".psd", ".pdf"}
 DESTINATIONS = {"youtube": ("YouTube", youtube), "frameio": ("Frame.io", frameio)}
+THIS_COMPUTER = "This computer"
+
+
+def is_media(path):
+    return (path.is_file() and not path.name.startswith((".", "~"))
+            and path.suffix.lower() in MEDIA_TYPES)
 
 
 def sha256(path):
@@ -23,20 +33,19 @@ def sha256(path):
 
 
 class Watcher(threading.Thread):
-    def __init__(self, store, folder, interval=10, settle=20, clock=time.time):
+    def __init__(self, store, inbox, interval=10, settle=20, clock=time.time):
         super().__init__(daemon=True)
         self.store = store
-        self.folder = Path(folder)
-        self.done_folder = self.folder / "Uploaded"
+        self.inbox = Path(inbox)
+        self.inbox.mkdir(parents=True, exist_ok=True)
         self.interval = interval      # seconds between scans
-        self.settle = settle          # file must be unchanged this long before upload
+        self.settle = settle          # a local file must be unchanged this long before upload
         self.clock = clock
         self.wake = threading.Event()
         self.lock = threading.Lock()
-        self.seen = {}                # name -> (size, mtime, first time seen unchanged)
-        self.retry_at = {}            # name -> (time, attempts)
-        self.sources = {}             # file name -> computer it came from
-        self.state = {"current": None, "last_scan": None, "files": {}, "notice": ""}
+        self.seen = {}                # path -> (size, mtime, first time seen unchanged)
+        self.retry_at = {}            # path -> (time, attempts)
+        self.state = {"current": None, "last_scan": None, "files": [], "notice": ""}
 
     # ---- thread ---------------------------------------------------------------
     def run(self):
@@ -58,9 +67,13 @@ class Watcher(threading.Thread):
 
     def snapshot(self):
         with self.lock:
-            return {**self.state, "files": dict(self.state["files"])}
+            return {**self.state, "files": list(self.state["files"])}
 
-    # ---- scanning -------------------------------------------------------------
+    def clear_reconnect_waits(self):
+        self.retry_at.clear()
+        self.poke()
+
+    # ---- what to look at ------------------------------------------------------
     def destinations(self):
         s = self.store.settings()
         out = []
@@ -70,108 +83,116 @@ class Watcher(threading.Thread):
             out.append("frameio")
         return out
 
-    def candidates(self):
-        if not self.folder.is_dir():
-            return []
-        return sorted(p for p in self.folder.iterdir()
-                      if p.is_file() and not p.name.startswith((".", "~"))
-                      and p.suffix.lower() in MEDIA_TYPES)
+    def folders(self):
+        """[(folder, label, is_inbox)]"""
+        out = []
+        local = self.store.settings()["folder"]
+        if local:
+            out.append((Path(local), THIS_COMPUTER, False))
+        computers = self.store.computers()
+        for d in sorted(p for p in self.inbox.iterdir() if p.is_dir() and not p.name.startswith(".")):
+            out.append((d, (computers.get(d.name) or {}).get("name") or "Another computer", True))
+        return out
 
-    def is_settled(self, path):
-        if path.name in self.sources:   # received over the network: already complete
+    def is_settled(self, path, from_inbox):
+        if from_inbox:                 # arrived complete over the network
             return True
         st = path.stat()
         now = self.clock()
         key = (st.st_size, st.st_mtime)
-        prev = self.seen.get(path.name)
+        prev = self.seen.get(str(path))
         if st.st_size == 0 or not prev or prev[:2] != key:
-            self.seen[path.name] = (*key, now)
+            self.seen[str(path)] = (*key, now)
             return False
         return now - prev[2] >= self.settle and now - st.st_mtime >= self.settle
 
+    # ---- scanning -------------------------------------------------------------
     def scan(self):
         self._set(last_scan=time.strftime("%H:%M:%S"), notice="")
-        if not self.folder.is_dir():
-            self._set(notice=f"Watch folder not found: {self.folder}")
-            return
-        files = self.candidates()
-        names = {p.name for p in files}
-        with self.lock:
-            for gone in set(self.state["files"]) - names:
-                del self.state["files"][gone]
         dests = self.destinations()
+        notices, listing = [], []
+        local = self.store.settings()["folder"]
+        if not local:
+            notices.append("Choose a watch folder for this computer.")
+        elif not Path(local).is_dir():
+            notices.append(f"This computer's folder isn't there any more: {local}")
         if not dests:
-            self._set(notice="No destination is turned on and connected.")
-        for path in files:
-            if not self.store.settings()["enabled"]:
-                return
-            if not self.is_settled(path):
-                self._file(path.name, "waiting for the file to finish copying/exporting")
+            notices.append("No destination is turned on and connected.")
+        for folder, label, from_inbox in self.folders():
+            if not folder.is_dir():
                 continue
-            when, _ = self.retry_at.get(path.name, (0, 0))
-            if self.clock() < when:
-                continue
-            if dests:
-                self.process(path, dests)
+            for path in sorted(p for p in folder.iterdir() if is_media(p)):
+                if not self.store.settings()["enabled"]:
+                    return
+                status = self.handle(path, label, from_inbox, dests)
+                if status:
+                    listing.append({"file": path.name, "from": label, "status": status})
+                    self._set(files=list(listing))
+        self._set(files=listing, notice=" ".join(notices))
 
-    def _file(self, name, status):
-        with self.lock:
-            self.state["files"][name] = status
-
-    # ---- one file -------------------------------------------------------------
-    def process(self, path, dests):
-        digest = sha256(path)
-        links = {}
+    def handle(self, path, label, from_inbox, dests):
+        """Upload if ready. Returns a status line if the file is still in the folder."""
+        if not self.is_settled(path, from_inbox):
+            return "waiting for the file to finish copying or exporting"
+        when, _ = self.retry_at.get(str(path), (0, 0))
+        if self.clock() < when:
+            return self._retry_text(path)
+        if not dests:
+            return "waiting for a destination"
         usable = [d for d in dests if DESTINATIONS[d][1].accepts(path)]
         if not usable:
-            self._file(path.name, "skipped: YouTube only takes video files")
-            return
+            return "skipped: YouTube only takes video files"
+        return self.process(path, label, from_inbox, usable)
+
+    def _retry_text(self, path):
+        when, _ = self.retry_at[str(path)]
+        if when - self.clock() > 10**8:
+            return "error, waiting for you to reconnect"
+        return f"error, trying again in {max(1, int((when - self.clock()) // 60))} min"
+
+    # ---- one file -------------------------------------------------------------
+    def process(self, path, label, from_inbox, usable):
+        digest = sha256(path)
+        links = {}
         for dest in usable:
-            label, mod = DESTINATIONS[dest]
+            name, mod = DESTINATIONS[dest]
             done = self.store.link_for(digest, dest)
             if done:
-                links[label] = done
+                links[name] = done
                 continue
-            self._file(path.name, f"uploading to {label}")
-            self._set(current={"file": path.name, "dest": label, "pct": 0})
+            self._set(current={"file": path.name, "from": label, "dest": name, "pct": 0})
             try:
-                link = mod.upload(self.store, path,
-                                  lambda pct, l=label: self._set(current={"file": path.name, "dest": l, "pct": pct}))
+                link = mod.upload(self.store, path, lambda pct, n=name: self._set(
+                    current={"file": path.name, "from": label, "dest": n, "pct": pct}))
             except Exception as e:  # noqa: BLE001
-                self._failed(path, label, e)
-                return
+                self._failed(path, label, name, e)
+                return self._retry_text(path)
             finally:
                 self._set(current=None)
-            links[label] = link
-            self.store.add_history(file=path.name, dest=dest, sha256=digest, link=link, status="ok",
-                                   source=self.sources.get(path.name, ""))
-        self.retry_at.pop(path.name, None)
-        self._move(path, links)
+            links[name] = link
+            self.store.add_history(file=path.name, source=label, dest=dest, sha256=digest, link=link, status="ok")
+        self.retry_at.pop(str(path), None)
+        self.seen.pop(str(path), None)
+        if from_inbox:
+            path.unlink()
+        else:
+            self._move(path, links)
+        return None
 
-    def _failed(self, path, label, err):
-        when, attempts = self.retry_at.get(path.name, (0, 0))
+    def _failed(self, path, label, name, err):
+        _, attempts = self.retry_at.get(str(path), (0, 0))
         attempts += 1
-        wait = 10**9 if isinstance(err, (youtube.NeedsReconnect, frameio.NeedsReconnect)) else min(30 * 2 ** attempts, 1800)
-        self.retry_at[path.name] = (self.clock() + wait, attempts)
-        msg = f"{label}: {err}"
-        self._file(path.name, "error, " + ("waiting for reconnect" if wait == 10**9 else f"retrying in {wait // 60 or 1} min"))
-        self.store.add_history(file=path.name, dest=label.lower().replace(".", ""), status="error", error=msg,
-                               source=self.sources.get(path.name, ""))
+        reconnect = isinstance(err, (youtube.NeedsReconnect, frameio.NeedsReconnect))
+        wait = 10**9 if reconnect else min(30 * 2 ** attempts, 1800)
+        self.retry_at[str(path)] = (self.clock() + wait, attempts)
+        self.store.add_history(file=path.name, source=label, dest=name.lower().replace(".", ""),
+                               status="error", error=f"{name}: {err}")
 
     def _move(self, path, links):
-        self.done_folder.mkdir(exist_ok=True)
-        target = self.done_folder / path.name
+        done = path.parent / "Uploaded"
+        done.mkdir(exist_ok=True)
+        target = done / path.name
         if target.exists():
-            target = self.done_folder / f"{path.stem} ({int(time.time())}){path.suffix}"
+            target = done / f"{path.stem} ({int(time.time())}){path.suffix}"
         shutil.move(str(path), target)
-        (self.done_folder / f"{target.name}.links.txt").write_text(
-            "".join(f"{k}: {v}\n" for k, v in links.items()))
-        with self.lock:
-            self.state["files"].pop(path.name, None)
-        self.seen.pop(path.name, None)
-        self.sources.pop(path.name, None)
-
-    def clear_reconnect_waits(self):
-        """Called after a connector is (re)connected so waiting files are retried."""
-        self.retry_at.clear()
-        self.poke()
+        (done / f"{target.name}.links.txt").write_text("".join(f"{k}: {v}\n" for k, v in links.items()))

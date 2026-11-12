@@ -4,11 +4,11 @@ FROM python:3.12-slim
 WORKDIR /srv
 COPY app ./app
 
-RUN useradd --uid 1000 --create-home uploader \
- && mkdir -p /data /watch && chown uploader:uploader /data /watch
-USER uploader
+# /data is writable by whichever user start.sh runs the container as.
+RUN mkdir -p /data && chmod 1777 /data
+USER 1000
 
-ENV WATCH_DIR=/watch DATA_DIR=/data PORT=8765 PUBLIC_URL=http://localhost:8765 PYTHONUNBUFFERED=1
+ENV DATA_DIR=/data PORT=8765 PYTHONUNBUFFERED=1
 EXPOSE 8765
 VOLUME ["/data"]
 
